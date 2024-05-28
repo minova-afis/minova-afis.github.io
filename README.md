@@ -1,1 +1,1 @@
-# minova-afis.github.io
+# MINOVA Hub Web Entrance
