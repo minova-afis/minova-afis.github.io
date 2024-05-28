@@ -194,8 +194,7 @@
 				  var host = $("#host").val();
 				  data.result = {
 					url: host + "/get",
-					username: $("#username").val(),
-					password: $("#password").val(),
+					headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
 					data: {path: node.key},
 					cache: false
 				  };
@@ -226,50 +225,60 @@
 			$( ".toolbar" ).controlgroup();
 			
 			$("#setvalue").on("click", function() {
-				var host = $("#host").val();
-				var path = $("#echoNode").text();
-				var value = $("#echoValue").val();
-				$.ajax({
-					url: host + '/set/' + path + '?value=' + value,
-					username: $("#username").val(),
-					password: $("#password").val(),
-					dataType: 'json',
-					success: function () {
-						notify('info', path + ' set');
-					},
-					error: function (request, status, error) {
-						notify('error', path + ' set failed ('+status+' '+request.responseText+')');
-					}
-				});
+				setValue();
 			});
 			
 			$("#download").on("click", function() {
-				var path = $("#echoNode").text();
-				var host = $("#host").val();
-				window.location = host + '/getvalue/' + path + '?style=binary';
+				downloadValue();
 			});
 			
 			$("#delete").on("click", function() {
-				var host = $("#host").val();
-				var path = $("#echoNode").text();
-				$.ajax({
-					url: host + '/delete/' + path,
-					username: $("#username").val(),
-					password: $("#password").val(),
-					dataType: 'json',
-					success: function () {
-						notify('info', path + ' deleted');
-					},
-					error: function (request, status, error) {
-						notify('error', path + ' delete failed ('+status+')');
-					}
-				});
+				deleteNode();
 			});
 			
 			$('echoNode').addClass("ui-widget ui-widget-content ui-corner-all");
 			$('echoValue').addClass("ui-widget ui-widget-content ui-corner-all");
 			$('echoModel').addClass("ui-widget ui-widget-content ui-corner-all");
 		} );
+		
+		function downloadValue() {
+			var path = $("#echoNode").text();
+			var host = $("#host").val();
+			window.location = host + '/getvalue/' + path + '?style=binary';
+		}
+		
+		function setValue() {
+			var host = $("#host").val();
+			var path = $("#echoNode").text();
+			var value = $("#echoValue").val();
+			$.ajax({
+				url: host + '/set/' + path + '?value=' + value,
+				headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
+				dataType: 'json',
+				success: function () {
+					notify('info', path + ' set');
+				},
+				error: function (request, status, error) {
+					notify('error', path + ' set failed ('+status+' '+request.responseText+')');
+				}
+			});
+		}
+		
+		function deleteNode() {
+			var host = $("#host").val();
+			var path = $("#echoNode").text();
+			$.ajax({
+				url: host + '/delete/' + path,
+				headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
+				dataType: 'json',
+				success: function () {
+					notify('info', path + ' deleted');
+				},
+				error: function (request, status, error) {
+					notify('error', path + ' delete failed ('+status+')');
+				}
+			});
+		}
 		
 		function notify(severity, text) {
 			$("#notificationtext").html(text);
