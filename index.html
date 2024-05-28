@@ -11,6 +11,8 @@
 	
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.3/jquery.fancytree-all.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.3/jquery.fancytree-all-deps.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/jquery.fancytree@2.23.0/src/jquery.fancytree.table.js"></script>
+	
 	<link href="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.3/skin-win8/ui.fancytree.min.css" rel="stylesheet" type="text/css">
 
 	<style type="text/css">
@@ -35,9 +37,6 @@
 			min-height: 170px;
 			box-sizing: border-box;
 			overflow: auto;
-		}
-		section {
-			width: 50%;
 		}
 		.clearfix:after {
 			content: ".";
@@ -104,10 +103,21 @@
 		// Table implementation
 		$(function(){
 			// --- Initialize sample trees
-			$("#tree1").fancytree({
-				selectMode: 0,
+			$("#tree").fancytree({
+				checkbox: false,
+				titlesTabbable: true,        // Add all node titles to TAB chain
+				selectMode: 1,
+				extensions: ["table", "gridnav"],
 				// tooltip: true,
 				// tooltip: function(event, data) { return data.node.title + "!"},
+				table: {
+					indentation: 16,         // indent every node level by 16px
+					nodeColumnIdx: 0         // render node expander, icon, and title to this column (default: #0)
+				},
+				gridnav: {
+					autofocusInput:   false, // Focus first embedded input if node gets activated
+					handleCursorKeys: true   // Allow UP/DOWN in inputs to move to prev/next node
+				},
 				
 				source: [
 					{title: "Root", key:"Environment", lazy: true, istreeroot: true},
@@ -118,6 +128,36 @@
 					data.tree.visit(function(n) {
 						n.key = n.title.split(" ")[0];
 					});
+				},
+				
+				renderColumns: function(event, data) {
+					var node = data.node,
+						$tdList = $(node.tr).find(">td");
+					var model = data.node.data.model;
+					// Make the title cell span the remaining columns if it's a folder:
+					if( node.isFolder() ) {
+						$tdList.eq(0)
+							.prop("colspan", 3)
+							.nextAll().remove();
+						return;
+					}
+
+					// Column #0: is rendered by fancytree
+					
+					// Column #1: Value column
+					var value = '';
+					var maxLen = 100;
+					if(model !== undefined) {
+						if(model.preview != null) {
+							value = (model.preview.length > maxLen ? model.preview.substring(0, maxLen) + "..." : model.preview);
+						} else if(model.value != null) {
+							value = (model.value.length > maxLen ? model.value.substring(0, maxLen) + "..." : model.value);
+						}
+					}
+					$tdList.eq(1).text(value);
+					
+					// Column #2: Edit and Tools
+					$tdList.eq(2).text('');
 				},
 				
 				// Update info when a value is selected and (de)activate actions
@@ -136,15 +176,13 @@
 					if(isDownloadable) {
 						var path = data.node.key;
 						var host = $("#host").val();
-						$("a[name='downloadLink']").prop("href", host + '/getvalue/' + path + '?style=binary');
-						$("a[name='viewLink']").prop("href", host + '/getvalue/' + path + '?style=text');
+						$("a[name='selectedpath']").prop("href", host + '/getvalue/' + path + '?style=text');
 					} else {
-						$("a[name='downloadLink']").removeAttr("href");
-						$("a[name='viewLink']").removeAttr("href");
+						$("a[name='selectedpath']").removeAttr("href");
 					}
 
 					// Infos
-					$("#echoNode").text(data.node.key);
+					$("a[name='selectedpath']").text(data.node.key);
 					$("#echoModel").val(data.node.data.model === undefined ? '' : JSON.stringify(data.node.data.model, null, 4));
 					$("#echoValue").val(data.node.data.model === undefined || data.node.data.model.value == null ? '' : data.node.data.model.value);
 				},
@@ -161,17 +199,14 @@
 						if(resp.childrenCount > 0 && resp.children != null) {
 							var i = 0;
 							for (const child of resp.children) {
-								if(child.visible == 'false') {
-								} else {
+								if(child.visible != 'false') {
+									// Create download links right in the tree
 									var value = child.name;
-									if(child.preview != null) {
-										value = value + " = " + (child.preview.length > 150 ? child.preview.substring(0, 150) + "..." : child.preview);
-									} else if(child.value != null) {
-										value = value + " = " + (child.value.length > 150 ? child.value.substring(0, 150) + "..." : child.value);
-									}
 									var host = $("#host").val();
-									data.result[i++] = {title:  value,
-														key:    data.node.key +'/'+ child.name,
+									var isDownloadable = (child.remoteType == 'ch.minova.assist.fs.LocalFile');
+									var path = data.node.key +'/'+ child.name;
+									data.result[i++] = {title:  isDownloadable ? '<a href="'+host + '/getvalue/' + path + '?style=text'+'">'+value+'</a>' : value,
+														key:    path,
 														lazy:   (child.childrenCount > 0),
 														icon:   "data:image/png;base64, " + child.iconData,
 														model:  child};
@@ -236,20 +271,20 @@
 				deleteNode();
 			});
 			
-			$('echoNode').addClass("ui-widget ui-widget-content ui-corner-all");
+			$('selectedpath').addClass("ui-widget ui-widget-content ui-corner-all");
 			$('echoValue').addClass("ui-widget ui-widget-content ui-corner-all");
 			$('echoModel').addClass("ui-widget ui-widget-content ui-corner-all");
 		} );
 		
 		function downloadValue() {
-			var path = $("#echoNode").text();
+			var path = $("a[name='selectedpath']").text();
 			var host = $("#host").val();
 			window.location = host + '/getvalue/' + path + '?style=binary';
 		}
 		
 		function setValue() {
 			var host = $("#host").val();
-			var path = $("#echoNode").text();
+			var path = $("a[name='selectedpath']").text();
 			var value = $("#echoValue").val();
 			$.ajax({
 				url: host + '/set/' + path + '?value=' + value,
@@ -266,7 +301,7 @@
 		
 		function deleteNode() {
 			var host = $("#host").val();
-			var path = $("#echoNode").text();
+			var path = $("a[name='selectedpath']").text();
 			$.ajax({
 				url: host + '/delete/' + path,
 				headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
@@ -330,21 +365,33 @@
 					<li><a href="#tabs-2">Settings</a></li>
 				</ul>
 				<div id="tabs-1" style="overflow:scroll">
-					<section style="overflow:scroll; height:400px; resize: both; background: #ffffff">
-						<div id="tree1"></div>
+					<section style="overflow:scroll; height:400px; resize: both; background: #ffffff; width: 50%">
+						<!--div id="tree"></div-->
+						
+						<table id="tree" style="min-width: 40em">
+							<colgroup>
+								<col width="*"></col>
+								<col width="*"></col>
+								<col width="30px"></col>
+							</colgroup>
+							<thead>
+								<tr> <th>Path</th> <th>Value</th> <th>Tools</th> </tr>
+							</thead>
+							<tbody>
+							</tbody>
+						</table>
 					</section>
 					
-					<section style="resize: both">
+					<section style="resize: both; width: 50%">
 						<div class="toolbar">
 							<button id="download">Download</button>
 							<button id="delete">Delete</button>
 							<button id="setvalue">Set</button>
 						</div>
 						<p>
-						<div><span id="echoNode" style="color: #8a8987"></span></div>
-
-						<a name="downloadLink" style="color: #8a8987">Download</a>
-						<a name="viewLink" style="color: #8a8987">View</a>
+						<a name="selectedpath" style="color: #8a8987">Path</a>
+						<p>
+						
 						<p>
 						<textarea id="echoValue" rows="5" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all">Value</textarea>
 						<p>
