@@ -173,8 +173,8 @@
 									data.result[i++] = {title:  value,
 														key:    data.node.key +'/'+ child.name,
 														lazy:   (child.childrenCount > 0),
-														icon:	host + '/getimage?path=' + data.node.key +'/'+ child.name,
-														model:   child};
+														icon:   "data:image/png;base64, " + child.iconData,
+														model:  child};
 								}
 							}
 						}
@@ -193,7 +193,7 @@
 				  }
 				  var host = $("#host").val();
 				  data.result = {
-					url: host + "/get",
+					url: host + "/get?imagedata=true",
 					headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
 					data: {path: node.key},
 					cache: false
@@ -358,7 +358,6 @@
 							<div class="td">
 								<input type="text" name="username" id="username" class="text ui-widget ui-state-default ui-corner-all"/>
 								<input type="password" name="password" id="password" class="text ui-widget ui-state-default ui-corner-all"/>
-								<input type="submit" name="sub" value="Remember" class="page ui-widget ui-state-default ui-corner-all"/>
 							</div>
 						</form>
 						<div class="tr">
