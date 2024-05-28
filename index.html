@@ -122,7 +122,12 @@
 				source: [
 					{title: "Root", key:"Environment", lazy: true, istreeroot: true},
 				],
-					
+				
+				// See more events here: https://unpkg.com/browse/jquery.fancytree@2.23.0/demo/sample-events.html
+				collapse: function(event, data) {
+					data.node.resetLazy();
+				},
+			
 				init: function(event, data) {
 					// Set key from first part of title (just for this demo output)
 					data.tree.visit(function(n) {
@@ -157,7 +162,7 @@
 					$tdList.eq(1).text(value);
 					
 					// Column #2: Edit and Tools
-					$tdList.eq(2).text('');
+					$tdList.eq(2).html('<span class="ui-icon ui-icon-refresh" title="refresh" onclick="reload(\''+data.node.key+'\')"></span>');
 				},
 				
 				// Update info when a value is selected and (de)activate actions
@@ -199,6 +204,7 @@
 						if(resp.childrenCount > 0 && resp.children != null) {
 							var i = 0;
 							for (const child of resp.children) {
+								// FIXME process commands
 								if(child.visible != 'false') {
 									// Create download links right in the tree
 									var value = child.name;
@@ -276,6 +282,15 @@
 			$('echoModel').addClass("ui-widget ui-widget-content ui-corner-all");
 		} );
 		
+		function reload(path) {
+			var node = $.ui.fancytree.getTree("#tree").getNodeByKey(path);
+			if(node.lazy) {
+				node.load(true);
+			} else if(node.level != 1) {
+				node.parent.load(true);
+			}
+		}
+		
 		function downloadValue() {
 			var path = $("a[name='selectedpath']").text();
 			var host = $("#host").val();
@@ -292,9 +307,11 @@
 				dataType: 'json',
 				success: function () {
 					notify('info', path + ' set');
+					reload(path);
 				},
 				error: function (request, status, error) {
 					notify('error', path + ' set failed ('+status+' '+request.responseText+')');
+					reload(path);
 				}
 			});
 		}
@@ -308,9 +325,11 @@
 				dataType: 'json',
 				success: function () {
 					notify('info', path + ' deleted');
+					reload(path);
 				},
 				error: function (request, status, error) {
 					notify('error', path + ' delete failed ('+status+')');
+					reload(path);
 				}
 			});
 		}
@@ -375,7 +394,7 @@
 								<col width="30px"></col>
 							</colgroup>
 							<thead>
-								<tr> <th>Path</th> <th>Value</th> <th>Tools</th> </tr>
+								<tr> <th>Path</th> <th>Value</th> <th> </th> </tr>
 							</thead>
 							<tbody>
 							</tbody>
