@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="https://code.jquery.com/ui/1.13.3/themes/base/jquery-ui.css">
+	<title>Hub Model</title>
+
+	<script src="https://code.jquery.com/jquery-3.7.1.js"></script>
+	<script src="https://code.jquery.com/ui/1.13.3/jquery-ui.js"></script>
+	
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.3/jquery.fancytree-all.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.3/jquery.fancytree-all-deps.min.js"></script>
+	<link href="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.3/skin-win8/ui.fancytree.min.css" rel="stylesheet" type="text/css">
+
+	<style type="text/css">
+		body {
+			font: 14px Arial,sans-serif; 
+			margin: 0px;
+		}
+		header {
+			padding: 10px 20px;
+			background: #f7ea79; 
+		}
+		header h1 {
+			font-size: 24px;
+		}
+		.container {
+			width: 100%;
+			background: #f2f2f2;  
+		}
+		section {
+			float: left; 
+			padding: 20px;
+			min-height: 170px;
+			box-sizing: border-box;
+			overflow: auto;
+		}
+		section {
+			width: 50%;
+		}
+		.clearfix:after {
+			content: ".";
+			display: block;
+			height: 0;
+			clear: both;
+			visibility: hidden;
+		}
+		footer {
+			background: #f7ea79;            
+			text-align: center;
+			padding: 5px;
+		}
+		
+		.toolbar {
+		  font-size: .75em;
+		}
+		
+		div.table {
+			display:table;
+			border-spacing: 10px;
+		}
+		form.tr, div.tr {
+			display:table-row;
+		}
+		spam.td, div.td, input.td, label.td {
+			display:table-cell;
+		}
+	
+		ul.fancytree-container {
+			width: 100%;
+			border: none;
+			inset: 0px 0px 0px 0px;
+		}
+		
+		#notification {
+			position:fixed;
+			top:0px;
+			width:100%;
+			z-index:105;
+			text-align:center;
+			font-weight:normal;
+			font-size:14px;
+			font-weight:bold;
+			color:white;
+			background-color:#FF7800;
+			padding:5px;
+		}
+		#notification span.dismiss {
+			border:2px solid #FFF;
+			padding:0 5px;
+			cursor:pointer;
+			float:right;
+			margin-right:10px;
+		}
+		#notification a {
+			color:white;
+			text-decoration:none;
+			font-weight:bold
+		}
+	</style>
+
+	<script type="text/javascript">
+		// Table implementation
+		$(function(){
+			// --- Initialize sample trees
+			$("#tree1").fancytree({
+				selectMode: 0,
+				// tooltip: true,
+				// tooltip: function(event, data) { return data.node.title + "!"},
+				
+				source: [
+					{title: "Root", key:"Environment", lazy: true, istreeroot: true},
+				],
+					
+				init: function(event, data) {
+					// Set key from first part of title (just for this demo output)
+					data.tree.visit(function(n) {
+						n.key = n.title.split(" ")[0];
+					});
+				},
+				
+				// Update info when a value is selected and (de)activate actions
+				activate: function(event, data) {
+					// Actions
+					var isDownloadable = (data.node.data.model !== undefined &&
+										  data.node.data.model.remoteType != null &&
+										  data.node.data.model.remoteType == 'ch.minova.assist.fs.LocalFile');
+					var isDeleteable = (data.node.data.model !== undefined && data.node.data.model.deleteable == 'true');
+					var isChangeable = (data.node.data.model !== undefined && data.node.data.model.value != null && data.node.data.model.readonly != 'true');
+					$("#download").button(isDownloadable ? 'enable' : 'disable');
+					$("#view").button(isDownloadable ? 'enable' : 'disable');
+					$("#delete").button(isDeleteable ? 'enable' : 'disable');
+					$("#setvalue").button(isChangeable ? 'enable' : 'disable');
+					$('#echoValue').prop('readonly', !isChangeable);
+					if(isDownloadable) {
+						var path = data.node.key;
+						var host = $("#host").val();
+						$("a[name='downloadLink']").prop("href", host + '/getvalue/' + path + '?style=binary');
+						$("a[name='viewLink']").prop("href", host + '/getvalue/' + path + '?style=text');
+					} else {
+						$("a[name='downloadLink']").removeAttr("href");
+						$("a[name='viewLink']").removeAttr("href");
+					}
+
+					// Infos
+					$("#echoNode").text(data.node.key);
+					$("#echoModel").val(data.node.data.model === undefined ? '' : JSON.stringify(data.node.data.model, null, 4));
+					$("#echoValue").val(data.node.data.model === undefined || data.node.data.model.value == null ? '' : data.node.data.model.value);
+				},
+				
+				
+				// Convert Hub REST answer format to fancytable format. Also load images
+				postProcess: function(event, data) {
+					var resp = data.response;
+					if(Array.isArray(resp)) {
+						data.result = resp;
+					} else if( resp.rid != null ) {
+						// Convert data...
+						data.result = [];
+						if(resp.childrenCount > 0 && resp.children != null) {
+							var i = 0;
+							for (const child of resp.children) {
+								if(child.visible == 'false') {
+								} else {
+									var value = child.name;
+									if(child.preview != null) {
+										value = value + " = " + (child.preview.length > 150 ? child.preview.substring(0, 150) + "..." : child.preview);
+									} else if(child.value != null) {
+										value = value + " = " + (child.value.length > 150 ? child.value.substring(0, 150) + "..." : child.value);
+									}
+									var host = $("#host").val();
+									data.result[i++] = {title:  value,
+														key:    data.node.key +'/'+ child.name,
+														lazy:   (child.childrenCount > 0),
+														icon:	host + '/getimage?path=' + data.node.key +'/'+ child.name,
+														model:   child};
+								}
+							}
+						}
+					} else {
+						// Signal error condition to tree loader
+						data.result = {
+							error: "ERROR #" + resp.faultCode + ": " + resp.faultMsg
+						}
+					}
+				},
+				
+				lazyLoad: function(event, data) {
+				  var node = data.node;
+				  if(node.data.istreeroot == true) {
+				     node.key = $("#rootpath").val();
+				  }
+				  var host = $("#host").val();
+				  data.result = {
+					url: host + "/get",
+					username: $("#username").val(),
+					password: $("#password").val(),
+					data: {path: node.key},
+					cache: false
+				  };
+				}
+			});
+		});
+		
+		// JQuery UI stuff
+		$( function() {
+			$( "#tabs" ).tabs();
+			
+			$( "#download" ).button({
+			  "icon": "ui-icon-arrowstop-1-s",
+			  "showLabel": true,
+			  "disabled": true
+			});
+			$( "#delete" ).button({
+			  "icon": "ui-icon-trash",
+			  "showLabel": true,
+			  "disabled": true
+			});
+			$( "#setvalue" ).button({
+			  "icon": "	ui-icon-arrowstop-1-n",
+			  "showLabel": true,
+			  "disabled": true
+			});
+			
+			$( ".toolbar" ).controlgroup();
+			
+			$("#setvalue").on("click", function() {
+				var host = $("#host").val();
+				var path = $("#echoNode").text();
+				var value = $("#echoValue").val();
+				$.ajax({
+					url: host + '/set/' + path + '?value=' + value,
+					username: $("#username").val(),
+					password: $("#password").val(),
+					dataType: 'json',
+					success: function () {
+						notify('info', path + ' set');
+					},
+					error: function (request, status, error) {
+						notify('error', path + ' set failed ('+status+' '+request.responseText+')');
+					}
+				});
+			});
+			
+			$("#download").on("click", function() {
+				var path = $("#echoNode").text();
+				var host = $("#host").val();
+				window.location = host + '/getvalue/' + path + '?style=binary';
+			});
+			
+			$("#delete").on("click", function() {
+				var host = $("#host").val();
+				var path = $("#echoNode").text();
+				$.ajax({
+					url: host + '/delete/' + path,
+					username: $("#username").val(),
+					password: $("#password").val(),
+					dataType: 'json',
+					success: function () {
+						notify('info', path + ' deleted');
+					},
+					error: function (request, status, error) {
+						notify('error', path + ' delete failed ('+status+')');
+					}
+				});
+			});
+			
+			$('echoNode').addClass("ui-widget ui-widget-content ui-corner-all");
+			$('echoValue').addClass("ui-widget ui-widget-content ui-corner-all");
+			$('echoModel').addClass("ui-widget ui-widget-content ui-corner-all");
+		} );
+		
+		function notify(severity, text) {
+			$("#notificationtext").html(text);
+			$("#notification").fadeIn("slow");
+			$("#notification").css("background-color", (severity == 'error' ? '#d44646' : (severity == 'debug' ? '#a1a1a1' : '#3ebd4b')));
+			$(".dismiss").click(function(){
+				$("#notification").fadeOut("slow");
+			});
+		}
+		
+		function GetURLParameter(sParam) {
+			var sPageURL = window.location.search.substring(1);
+			var sURLVariables = sPageURL.split('&');
+			for (var i = 0; i < sURLVariables.length; i++) {
+				var sParameterName = sURLVariables[i].split('=');
+				if (sParameterName[0] == sParam) {
+					return sParameterName[1];
+				}
+			}
+		}
+		
+		$(document).ready ( function(){
+			var path = GetURLParameter('path');
+			var host = GetURLParameter('host');
+			if(path != null && path != '')
+				$( "#rootpath" ).val(path);
+			if(host != null && host != '')
+				$( "#host" ).val(host);
+		});
+	</script>
+	
+</head>
+
+<body>
+	<div class="container">
+	    <header>
+            <h1>MINOVA Hub Viewer</h1>
+        </header>
+		
+		<div id="notification" style="display: none;">
+		  <span class="dismiss"><a title="dismiss this notification">x</a></span>
+		  <span id="notificationtext"></span>
+		</div>
+		
+		<div class="wrapper clearfix">
+			<div id="tabs">
+				<ul>
+					<li><a href="#tabs-1">Model</a></li>
+					<li><a href="#tabs-2">Settings</a></li>
+				</ul>
+				<div id="tabs-1" style="overflow:scroll">
+					<section style="overflow:scroll; height:400px; resize: both; background: #ffffff">
+						<div id="tree1"></div>
+					</section>
+					
+					<section style="resize: both">
+						<div class="toolbar">
+							<button id="download">Download</button>
+							<button id="delete">Delete</button>
+							<button id="setvalue">Set</button>
+						</div>
+						<p>
+						<div><span id="echoNode" style="color: #8a8987"></span></div>
+
+						<a name="downloadLink" style="color: #8a8987">Download</a>
+						<a name="viewLink" style="color: #8a8987">View</a>
+						<p>
+						<textarea id="echoValue" rows="5" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all">Value</textarea>
+						<p>
+						<textarea id="echoModel" rows="5" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all">Model JSON</textarea>
+					</section>
+				</div>
+				<div id="tabs-2" style="overflow:scroll">
+					<div class="table">
+						<form name="credentials" id="login" method="post" class="tr">
+							<label class="td" for="username">Credentials </label>
+							<div class="td">
+								<input type="text" name="username" id="username" class="text ui-widget ui-state-default ui-corner-all"/>
+								<input type="password" name="password" id="password" class="text ui-widget ui-state-default ui-corner-all"/>
+								<input type="submit" name="sub" value="Remember" class="page ui-widget ui-state-default ui-corner-all"/>
+							</div>
+						</form>
+						<div class="tr">
+							<label class="td" for="host">Host</label>
+							<input type="text" name="host" id="host" class="td text ui-widget ui-state-default ui-corner-all" value="https://saas-app.minova.com/minova/hub" style="width: 25em"/>
+						</div>
+						<div class="tr">
+							<label class="td" for="rootpath">Model root </label>
+							<input type="text" name="rootpath" id="rootpath" class="td text ui-widget ui-state-default ui-corner-all" value="Environment" style="width: 25em"/>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<footer>
+            <p>copyright &copy; MINOVA Information Services GmbGH</p>
+        </footer>
+	</div>
+</body>
+</html>
