@@ -167,31 +167,8 @@
 				
 				// Update info when a value is selected and (de)activate actions
 				activate: function(event, data) {
-					// Actions
-					var isDownloadable = (data.node.data.model !== undefined &&
-										  data.node.data.model.remoteType != null &&
-										  data.node.data.model.remoteType == 'ch.minova.assist.fs.LocalFile');
-					var isDeleteable = (data.node.data.model !== undefined && data.node.data.model.deleteable == 'true');
-					var isChangeable = (data.node.data.model !== undefined && data.node.data.model.value != null && data.node.data.model.readonly != 'true');
-					$("#download").button(isDownloadable ? 'enable' : 'disable');
-					$("#view").button(isDownloadable ? 'enable' : 'disable');
-					$("#delete").button(isDeleteable ? 'enable' : 'disable');
-					$("#setvalue").button(isChangeable ? 'enable' : 'disable');
-					$('#echoValue').prop('readonly', !isChangeable);
-					if(isDownloadable) {
-						var path = data.node.key;
-						var host = $("#host").val();
-						$("a[name='selectedpath']").prop("href", host + '/getvalue/' + path + '?style=text');
-					} else {
-						$("a[name='selectedpath']").removeAttr("href");
-					}
-
-					// Infos
-					$("a[name='selectedpath']").text(data.node.key);
-					$("#echoModel").val(data.node.data.model === undefined ? '' : JSON.stringify(data.node.data.model, null, 4));
-					$("#echoValue").val(data.node.data.model === undefined || data.node.data.model.value == null ? '' : data.node.data.model.value);
+					fillInfo(data.node.key, data.node.data.model);
 				},
-				
 				
 				// Convert Hub REST answer format to fancytable format. Also load images
 				postProcess: function(event, data) {
@@ -216,6 +193,9 @@
 														lazy:   (child.childrenCount > 0),
 														icon:   "data:image/png;base64, " + child.iconData,
 														model:  child};
+									// Update currently selected
+									if(path == getCurrentPath())
+										fillInfo(path, child);
 								}
 							}
 						}
@@ -245,8 +225,27 @@
 		
 		// JQuery UI stuff
 		$( function() {
-			$( "#tabs" ).tabs();
+			$( "#tabs" ).tabs({
+			  //event: "mouseover"
+			});
 			
+			$( "#accordion" ).accordion({
+				heightStyle: "content" 
+				//heightStyle: "fill"
+			});
+		 
+			$( "#accordion-resizer" ).resizable({
+			  minHeight: 140,
+			  minWidth: 200,
+			  resize: function() {
+				$( "#accordion" ).accordion( "refresh" );
+			  }
+			});
+			$( "#refresh" ).button({
+			  "icon": "ui-icon-refresh",
+			  "showLabel": true,
+			  "disabled": false
+			});
 			$( "#download" ).button({
 			  "icon": "ui-icon-arrowstop-1-s",
 			  "showLabel": true,
@@ -265,6 +264,10 @@
 			
 			$( ".toolbar" ).controlgroup();
 			
+			$("#refresh").on("click", function() {
+				reload('');
+			});
+			
 			$("#setvalue").on("click", function() {
 				setValue();
 			});
@@ -282,7 +285,87 @@
 			$('echoModel').addClass("ui-widget ui-widget-content ui-corner-all");
 		} );
 		
+		// Delete currently selected node
+		function deleteNode() {
+			var host = $("#host").val();
+			var path = getCurrentPath();
+			$.ajax({
+				url: host + '/delete/' + path,
+				headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
+				dataType: 'json',
+				success: function () {
+					notify('info', path + ' deleted');
+					reload(path);
+				},
+				error: function (request, status, error) {
+					notify('error', path + ' delete failed ('+status+')');
+					reload(path);
+				}
+			});
+		}
+		
+		// Download current selected value
+		function downloadValue() {
+			var path = getCurrentPath();
+			var host = $("#host").val();
+			window.location = host + '/getvalue/' + path + '?style=binary';
+		}
+		
+		// Show details on given model elements
+		function fillInfo(path, model) {
+			// Actions
+			var isDownloadable = (model !== undefined &&
+								  model.remoteType != null &&
+								  model.remoteType == 'ch.minova.assist.fs.LocalFile');
+			var isDeleteable = (model !== undefined && model.deleteable == 'true');
+			var isChangeable = (model !== undefined && model.value != null && model.readonly != 'true');
+			$("#download").button(isDownloadable ? 'enable' : 'disable');
+			$("#view").button(isDownloadable ? 'enable' : 'disable');
+			$("#delete").button(isDeleteable ? 'enable' : 'disable');
+			$("#setvalue").button(isChangeable ? 'enable' : 'disable');
+			$('#echoValue').prop('readonly', !isChangeable);
+			if(isDownloadable) {
+				var host = $("#host").val();
+				$("a[name='selectedpath']").prop("href", host + '/getvalue/' + path + '?style=text');
+			} else {
+				$("a[name='selectedpath']").removeAttr("href");
+			}
+
+			// Infos
+			$("a[name='selectedpath']").text(path);
+			$("#echoModel").val(model === undefined ? '' : JSON.stringify(model, null, 4));
+			$("#echoValue").val(model === undefined ? '' : (model.value == null ? model.preview : model.value));
+		}
+
+		function getCurrentPath() {
+			return $("a[name='selectedpath']").text();
+		}
+		
+		// Support for settings given in the URL
+		function getURLParameter(sParam) {
+			var sPageURL = window.location.search.substring(1);
+			var sURLVariables = sPageURL.split('&');
+			for (var i = 0; i < sURLVariables.length; i++) {
+				var sParameterName = sURLVariables[i].split('=');
+				if (sParameterName[0] == sParam) {
+					return sParameterName[1];
+				}
+			}
+		}
+
+		function notify(severity, text) {
+			$("#notificationtext").html(text);
+			$("#notification").fadeIn("slow");
+			$("#notification").css("background-color", (severity == 'error' ? '#d44646' : (severity == 'debug' ? '#a1a1a1' : '#3ebd4b')));
+			$(".dismiss").click(function(){
+				$("#notification").fadeOut("slow");
+			});
+		}
+		
+		// Reload desired or currently selected fancy tree node
 		function reload(path) {
+			if(path === undefined || path == null || path == '')
+				path = getCurrentPath();
 			var node = $.ui.fancytree.getTree("#tree").getNodeByKey(path);
 			if(node.lazy) {
 				node.load(true);
@@ -291,15 +374,10 @@
 			}
 		}
 		
-		function downloadValue() {
-			var path = $("a[name='selectedpath']").text();
-			var host = $("#host").val();
-			window.location = host + '/getvalue/' + path + '?style=binary';
-		}
-		
+		// Transfer value from value-textarea to the server
 		function setValue() {
 			var host = $("#host").val();
-			var path = $("a[name='selectedpath']").text();
+			var path = getCurrentPath();
 			var value = $("#echoValue").val();
 			$.ajax({
 				url: host + '/set/' + path + '?value=' + value,
@@ -316,47 +394,10 @@
 			});
 		}
 		
-		function deleteNode() {
-			var host = $("#host").val();
-			var path = $("a[name='selectedpath']").text();
-			$.ajax({
-				url: host + '/delete/' + path,
-				headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
-				dataType: 'json',
-				success: function () {
-					notify('info', path + ' deleted');
-					reload(path);
-				},
-				error: function (request, status, error) {
-					notify('error', path + ' delete failed ('+status+')');
-					reload(path);
-				}
-			});
-		}
-		
-		function notify(severity, text) {
-			$("#notificationtext").html(text);
-			$("#notification").fadeIn("slow");
-			$("#notification").css("background-color", (severity == 'error' ? '#d44646' : (severity == 'debug' ? '#a1a1a1' : '#3ebd4b')));
-			$(".dismiss").click(function(){
-				$("#notification").fadeOut("slow");
-			});
-		}
-		
-		function GetURLParameter(sParam) {
-			var sPageURL = window.location.search.substring(1);
-			var sURLVariables = sPageURL.split('&');
-			for (var i = 0; i < sURLVariables.length; i++) {
-				var sParameterName = sURLVariables[i].split('=');
-				if (sParameterName[0] == sParam) {
-					return sParameterName[1];
-				}
-			}
-		}
-		
+		// Transfer URL parameters to form: path, host
 		$(document).ready ( function(){
-			var path = GetURLParameter('path');
-			var host = GetURLParameter('host');
+			var path = getURLParameter('path');
+			var host = getURLParameter('host');
 			if(path != null && path != '')
 				$( "#rootpath" ).val(path);
 			if(host != null && host != '')
@@ -380,14 +421,12 @@
 		<div class="wrapper clearfix">
 			<div id="tabs">
 				<ul>
-					<li><a href="#tabs-1">Model</a></li>
-					<li><a href="#tabs-2">Settings</a></li>
+					<li><a href="#tabs-1"><span class="ui-icon ui-icon-home"></span>Model</a></li>
+					<li><a href="#tabs-2"><span class="ui-icon ui-icon-gear"></span>Settings</a></li>
 				</ul>
 				<div id="tabs-1" style="overflow:scroll">
-					<section style="overflow:scroll; height:400px; resize: both; background: #ffffff; width: 50%">
-						<!--div id="tree"></div-->
-						
-						<table id="tree" style="min-width: 40em">
+					<section style="overflow:scroll; height:30em; resize: both; background: #ffffff; width: fit-content">
+						<table id="tree" style="min-width: 20em">
 							<colgroup>
 								<col width="*"></col>
 								<col width="*"></col>
@@ -401,20 +440,30 @@
 						</table>
 					</section>
 					
-					<section style="resize: both; width: 50%">
-						<div class="toolbar">
-							<button id="download">Download</button>
-							<button id="delete">Delete</button>
-							<button id="setvalue">Set</button>
+					<section style="overflow:scroll; 20em; resize: both; background: #ffffff; width: 40em">
+					<!--div id="accordion-resizer" class="ui-widget-content"-->
+					  <div id="accordion">
+						<h3><span class="ui-icon ui-icon-script"></span>Info</h3>
+						<div>
+							<div class="toolbar">
+								<button id="refresh">Refresh</button>
+								<button id="download">Download</button>
+								<button id="delete">Delete</button>
+								<button id="setvalue">Set</button>
+							</div>
+							<p>
+							<a name="selectedpath" style="color: #8a8987"></a>
+							<p>
+							<p>
+							<textarea id="echoValue" rows="5" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all">Value</textarea>
+							
 						</div>
-						<p>
-						<a name="selectedpath" style="color: #8a8987">Path</a>
-						<p>
-						
-						<p>
-						<textarea id="echoValue" rows="5" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all">Value</textarea>
-						<p>
-						<textarea id="echoModel" rows="5" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all">Model JSON</textarea>
+						<h3><span class="ui-icon ui-icon-script"></span>JSON</h3>
+						<div>
+							<textarea id="echoModel" rows="15" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all">Model JSON</textarea>
+						</div>
+					  <!--/div-->
+					</div>
 					</section>
 				</div>
 				<div id="tabs-2" style="overflow:scroll">
