@@ -12,7 +12,10 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.3/jquery.fancytree-all.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.3/jquery.fancytree-all-deps.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/jquery.fancytree@2.23.0/src/jquery.fancytree.table.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/ui-contextmenu@1.18.1/jquery.ui-contextmenu.min.js"></script>
+	<script src=" https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
 	
+	<link href=" https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css " rel="stylesheet">
 	<link href="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.3/skin-win8/ui.fancytree.min.css" rel="stylesheet" type="text/css">
 
 	<style type="text/css">
@@ -71,35 +74,26 @@
 			border: none;
 			inset: 0px 0px 0px 0px;
 		}
+
+		.severity_debug   {color: #9da1a3; font-family: monospace;font-size: x-small;margin-bottom: 0px}
+		.severity_info    {color: #095585; font-family: monospace;font-size: x-small;margin-bottom: 0px}
+		.severity_warning {color: #db7d12; font-family: monospace;font-size: x-small;margin-bottom: 0px}
+		.severity_error   {color: #cc3d27; font-family: monospace;font-size: x-small;margin-bottom: 0px}
 		
-		#notification {
-			position:fixed;
-			top:0px;
-			width:100%;
-			z-index:105;
-			text-align:center;
-			font-weight:normal;
-			font-size:14px;
-			font-weight:bold;
-			color:white;
-			background-color:#FF7800;
-			padding:5px;
-		}
-		#notification span.dismiss {
-			border:2px solid #FFF;
-			padding:0 5px;
-			cursor:pointer;
-			float:right;
-			margin-right:10px;
-		}
-		#notification a {
-			color:white;
-			text-decoration:none;
-			font-weight:bold
-		}
+		label.dialogfield, input.password.dialogfield, input.text.dialogfield { display:block; }
+		input.password.dialogfield  { margin-bottom:12px; width:95%; padding: .4em; }
+		input.text.dialogfield { margin-bottom:12px; width:95%; padding: .4em; }
+		input.checkbox.dialogfield { margin-bottom:12px; padding: .4em; }
+		fieldset { padding:0; border:0; margin-top:25px; }
+		h1 { font-size: 1.2em; margin: .6em 0; }
+		.ui-dialog .ui-state-error { padding: .3em; }
+		.validateTips { border: 1px solid transparent; padding: 0.3em; }
 	</style>
 
 	<script type="text/javascript">
+		var dialog;
+		var dialogCommand;
+		
 		// Table implementation
 		$(function(){
 			// --- Initialize sample trees
@@ -120,7 +114,7 @@
 				},
 				
 				source: [
-					{title: "Root", key:"Environment", lazy: true, istreeroot: true},
+					{title: "Root", key:"Environment", lazy: true, istreeroot: true, extraClasses: 'hasmenu'},
 				],
 				
 				// See more events here: https://unpkg.com/browse/jquery.fancytree@2.23.0/demo/sample-events.html
@@ -142,7 +136,7 @@
 					// Make the title cell span the remaining columns if it's a folder:
 					if( node.isFolder() ) {
 						$tdList.eq(0)
-							.prop("colspan", 3)
+							.prop("colspan", 4)
 							.nextAll().remove();
 						return;
 					}
@@ -162,7 +156,13 @@
 					$tdList.eq(1).text(value);
 					
 					// Column #2: Edit and Tools
-					$tdList.eq(2).html('<span class="ui-icon ui-icon-refresh" title="refresh" onclick="reload(\''+data.node.key+'\')"></span>');
+					$tdList.eq(2).html('<span class="ui-icon ui-icon-refresh" style="cursor:pointer" title="refresh" onclick="reload(\''+data.node.key+'\')"></span>');
+				},
+				
+				renderNode: function (event, data) {
+					var node = data.node;
+					if (node.data.model !== undefined && node.data.model.visible == 'false')
+						$(node.span).closest('li').addClass('hide');
 				},
 				
 				// Update info when a value is selected and (de)activate actions
@@ -178,21 +178,33 @@
 					} else if( resp.rid != null ) {
 						// Convert data...
 						data.result = [];
+						if(data.node.data !== undefined) {
+							if(data.node.data.model == undefined) {
+								data.node.data.model = {children: resp.children};
+							} else {
+								data.node.data.model.children = resp.children;
+							}
+						}
+							
 						if(resp.childrenCount > 0 && resp.children != null) {
 							var i = 0;
 							for (const child of resp.children) {
 								// FIXME process commands
-								if(child.visible != 'false') {
+								var showHidden = $("#showHidden").is(":checked");
+								if(showHidden || child.visible != 'false') {
 									// Create download links right in the tree
 									var value = child.name;
 									var host = $("#host").val();
 									var isDownloadable = (child.remoteType == 'ch.minova.assist.fs.LocalFile');
 									var path = data.node.key +'/'+ child.name;
-									data.result[i++] = {title:  isDownloadable ? '<a href="'+host + '/getvalue/' + path + '?style=text'+'">'+value+'</a>' : value,
+									data.result[i++] = {title:  (isDownloadable
+																? '<a class="hasmenu" key="'+path+'" href="'+host + '/getvalue/' + path + '?style=text'+'">'+value+'</a>'
+																: '<div class="hasmenu" key="'+path+'">' + value + '</div>'),
 														key:    path,
 														lazy:   (child.childrenCount > 0),
 														icon:   "data:image/png;base64, " + child.iconData,
-														model:  child};
+														model:  child,
+														extraClasses: (child.visible == 'false' ? 'hide' : '')};
 									// Update currently selected
 									if(path == getCurrentPath())
 										fillInfo(path, child);
@@ -223,12 +235,29 @@
 			});
 		});
 		
+		
 		// JQuery UI stuff
 		$( function() {
+			// #### Context menu ####
+			$("#tree").contextmenu({
+				delegate: ".hasmenu",
+				menu: [],
+					
+				beforeOpen: function(event, ui) {
+					$("#tree").contextmenu("replaceMenu", getMenu(ui.target[0].getAttribute("key")));
+				},
+				
+				select: function(event, ui) {
+					execute(ui.cmd, ui.target.key);
+				}
+			});
+			
+			// #### Tabs ####
 			$( "#tabs" ).tabs({
 			  //event: "mouseover"
 			});
 			
+			// #### Right accordion ####
 			$( "#accordion" ).accordion({
 				heightStyle: "content" 
 				//heightStyle: "fill"
@@ -241,6 +270,8 @@
 				$( "#accordion" ).accordion( "refresh" );
 			  }
 			});
+			
+			// #### Default buttons ####
 			$( "#refresh" ).button({
 			  "icon": "ui-icon-refresh",
 			  "showLabel": true,
@@ -280,9 +311,11 @@
 				deleteNode();
 			});
 			
+			// #### Some styles ####
 			$('selectedpath').addClass("ui-widget ui-widget-content ui-corner-all");
 			$('echoValue').addClass("ui-widget ui-widget-content ui-corner-all");
 			$('echoModel').addClass("ui-widget ui-widget-content ui-corner-all");
+			$('logText').addClass("ui-widget ui-widget-content ui-corner-all");
 		} );
 		
 		// Delete currently selected node
@@ -309,6 +342,139 @@
 			var path = getCurrentPath();
 			var host = $("#host").val();
 			window.location = host + '/getvalue/' + path + '?style=binary';
+		}
+		
+		// Execute command
+		function execute(cmd, path) {
+			if(cmd == 'refresh') {
+				reload(path);
+			} else if(cmd == 'delete') {
+				deleteNode();
+			} else if(cmd == 'download') {
+				downloadValue();
+			} else {
+				if(cmd.includes(";")) {
+					var params = cmd.substring(cmd.indexOf(";") + 1).split(";");
+					cmd = cmd.substring(0, cmd.indexOf(";"));
+					var html = '<div id="dialog-form" title="Execute '+cmd+'">' +
+							   '<p class="validateTips">Please enter required arguments</p><form><fieldset>';
+					for(param of params) {
+						var def = param.split(",");
+						var type = 'text';
+						if(def[1] == 'java.lang.Boolean')
+							type = 'checkbox';
+						if(def[4] == 'Password')
+							type = 'password';
+						if(type == 'checkbox') {
+							html += '<label for="'+def[0]+'">'+def[0]+'</label>';
+							html += '<input type="checkbox" name="'+def[0]+'" id="'+def[0]+'" value="'+def[3]+'" class="ui-widget-content ui-corner-all"></input>';
+						} else {
+							html += '<label class="dialogfield" for="'+def[0]+'">'+def[0]+'</label>';
+							html += '<input type="'+type+'" name="'+def[0]+'" id="'+def[0]+'" value="'+def[3]+'" class="dialogfield text ui-widget-content ui-corner-all"></input>';
+						}
+					}
+					html += '</fieldset></form></div>'
+					
+					var newDiv = $(document.createElement('div')); 
+					$(newDiv).html(html);
+					dialog = $(newDiv).dialog({
+						autoOpen: false,
+						height: 400,
+						width: 350,
+						modal: true,
+						buttons: {
+							"execute": function() {
+								dialog.dialog("close");
+								var argsStr = '';
+								args = new Object();
+								$(dialog).each(function(){
+									for(input of $(this).find(':input')) {
+										var value = ($(input).prop('type') == 'checkbox' ? '' + $(input).is(":checked") : $(input).val());
+										$(args).attr('arg' + $(input).prop('name'), value);
+										argsStr += (argsStr.length == 0 ? "?" : "&") + 'arg' + $(input).prop('name') + "=" + value;
+									}
+								});
+								console.log(args);
+								var host = $("#host").val();
+								$.ajax({
+									url: host + '/call/' + cmd + argsStr,
+									headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
+									dataType: 'json',
+									//data: JSON.stringify(args),
+									success: function (answer) {
+										if(answer !== undefined && answer.children !== undefined && answer.children[0].name == 'Log') {
+											logMessages(answer.children[0].children);
+											notifyWith(answer.children[0].children[answer.children[0].children.length - 1]);
+										} else {
+											notify('info', cmd + ' call finished');
+										}
+									},
+									error: function (request, status, error) {
+										notify('error', cmd + ' call failed ('+status+' '+request.responseText+')');
+									}
+								});
+							},
+							Cancel: function() {
+								dialog.dialog("close");
+							}
+						}
+					});
+					dialog.dialog( "open" );
+					// We need to ask some values...
+				} else {
+					var host = $("#host").val();
+					$.ajax({
+						url: host + '/call/' + cmd,
+						headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
+						dataType: 'json',
+						success: function (answer) {
+							if(answer !== undefined && answer.children !== undefined && answer.children[0].name == 'Log') {
+								logMessages(answer.children[0].children);
+								notifyWith(answer.children[0].children[answer.children[0].children.length - 1]);
+							} else {
+								notify('info', cmd + ' call finished');
+							}
+						},
+						error: function (request, status, error) {
+							notify('error', cmd + ' call failed ('+status+' '+request.responseText+')');
+						}
+					});
+				}
+				// Find the model of the command...
+				// Special command?
+			}
+		}
+		
+		function text2message(logText) {
+			var text = logText;
+			var time;
+			var severity = "info";
+			if(text.includes('[') && text.includes(']')) {
+				severity = text.substring(text.indexOf('[')+1, text.indexOf(']')).toLowerCase();
+				text = text.substring(text.indexOf(']') + 1).trim();
+			}
+			if(text.includes('[') && text.includes(']')) {
+				time = text.substring(text.indexOf('[')+1, text.indexOf(']'));
+				text = text.substring(text.indexOf(']') + 1).trim();
+			}
+			return {time: time, severity: severity, text: text};
+		}
+		
+		/** Log log messages
+		*/
+		function logMessages(logs) {
+			for(log of logs) {
+				var message = text2message(log.preview);
+				logMessage(message.time, message.severity, message.text);
+			}
+		}
+		
+		function logMessage(time, severity, text) {
+			if(severity != null)
+				severity = severity.toLowerCase();
+			var toPrint = (time == null ? '' : '['+time+'] ' ) + '[' + severity + '] ' + text;
+			$("#logText").append('<p class="severity_'+severity+'">'+toPrint+'</p>');
+			console.log(toPrint);
 		}
 		
 		// Show details on given model elements
@@ -341,6 +507,36 @@
 			return $("a[name='selectedpath']").text();
 		}
 		
+		function getMenu(key) {
+			if(key == null)
+				key = (getCurrentPath() == 'Root' ? 'Environment' : getCurrentPath());
+			var tree = $.ui.fancytree.getTree("#tree");
+			var node = tree.getNodeByKey(key);
+			var model = (node == null ? null : node.data.model);
+			var menu = [];
+			menu.push({title: "Refresh", cmd: "refresh", uiIcon: "ui-icon-refresh"});
+			
+			if(model !== undefined && model != null) {
+				if(model.remoteType == 'ch.minova.assist.fs.LocalFile')
+					menu.push({title: "Download", cmd: "download", uiIcon: "ui-icon-arrowstop-1-s"});
+				if(model.deleteable == 'true')
+					menu.push({title: "Delete", cmd: "delete", uiIcon: "ui-icon-trash"});
+					
+				if(model.children !== undefined) {
+					for (const child of model.children) {
+						if(child.remoteType == 'ch.minova.appmodel.command.AutoGeneratedCommand' && child.active != 'false') {
+							var title = child.name + (child.args == null ? '' : ' ...');
+							var cmd = key + '/' + child.name + (child.args == null ? '' : ';' + child.args);
+							menu.push({title: title, cmd: cmd, uiIcon: (child.args == null ? 'ui-icon-play' : 'ui-icon-comment')});// 'url(data:image/png;base64, '+child.iconData+')'});
+						}
+					}
+				}
+					
+			}
+			//menu.push({title: "----"});
+			return menu;
+		}
+		
 		// Support for settings given in the URL
 		function getURLParameter(sParam) {
 			var sPageURL = window.location.search.substring(1);
@@ -352,14 +548,21 @@
 				}
 			}
 		}
+		
+		function notifyWith(log) {
+			var message = text2message(log.preview);
+			notify(message.severity, message.text);
+		}
 
 		function notify(severity, text) {
-			$("#notificationtext").html(text);
-			$("#notification").fadeIn("slow");
-			$("#notification").css("background-color", (severity == 'error' ? '#d44646' : (severity == 'debug' ? '#a1a1a1' : '#3ebd4b')));
-			$(".dismiss").click(function(){
-				$("#notification").fadeOut("slow");
-			});
+			if(severity.startsWith('err')) {
+				toastr.error(text, {hideDuration: 10000, preventDuplicates: true, progressBar: true});
+			} else if(severity.startsWith('warn')) {
+				toastr.warning(text, {hideDuration: 5000, preventDuplicates: true, progressBar: true});
+			} else {
+				toastr.info(text, {hideDuration: 2000, preventDuplicates: true, progressBar: true});
+			}
+			logMessage(null, severity, text);
 		}
 		
 		// Reload desired or currently selected fancy tree node
@@ -431,9 +634,10 @@
 								<col width="*"></col>
 								<col width="*"></col>
 								<col width="30px"></col>
+								<col width="30px"></col>
 							</colgroup>
 							<thead>
-								<tr> <th>Path</th> <th>Value</th> <th> </th> </tr>
+								<tr> <th>Path</th> <th>Value</th> <th> </th> <th> </th></tr>
 							</thead>
 							<tbody>
 							</tbody>
@@ -455,13 +659,19 @@
 							<a name="selectedpath" style="color: #8a8987"></a>
 							<p>
 							<p>
-							<textarea id="echoValue" rows="5" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all">Value</textarea>
+							<textarea id="echoValue" rows="5" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all"></textarea>
 							
 						</div>
+						
+						<h3><span class="ui-icon ui-icon-info"></span>Logs</h3>
+						<div id="logText" style=" resize: vertical" class="ui-widget ui-state-default ui-corner-all" style="margin-bottom: 0px">
+						</div>
+						
 						<h3><span class="ui-icon ui-icon-script"></span>JSON</h3>
 						<div>
-							<textarea id="echoModel" rows="15" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all">Model JSON</textarea>
+							<textarea id="echoModel" rows="15" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all"></textarea>
 						</div>
+
 					  <!--/div-->
 					</div>
 					</section>
@@ -482,6 +692,10 @@
 						<div class="tr">
 							<label class="td" for="rootpath">Model root </label>
 							<input type="text" name="rootpath" id="rootpath" class="td text ui-widget ui-state-default ui-corner-all" value="Environment" style="width: 25em"/>
+						</div>
+						<div class="tr">
+							<label class="td" for="showHidden">Show hidden nodes </label>
+							<input type="checkbox" name="showHidden" id="showHidden" class="td checkbox ui-widget ui-state-default ui-corner-all"/>
 						</div>
 					</div>
 				</div>
