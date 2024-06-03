@@ -13,9 +13,11 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.3/jquery.fancytree-all-deps.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/jquery.fancytree@2.23.0/src/jquery.fancytree.table.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/ui-contextmenu@1.18.1/jquery.ui-contextmenu.min.js"></script>
-	<script src=" https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/toastr@2.1.4/toastr.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/json-browse@0.2.0/json-browse/jquery.json-browse.min.js"></script>
 	
-	<link href=" https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css " rel="stylesheet">
+	<link href="https://cdn.jsdelivr.net/npm/json-browse@0.2.0/json-browse/jquery.json-browse.min.css" rel="stylesheet">
+	<link href="https://cdn.jsdelivr.net/npm/toastr@2.1.4/build/toastr.min.css" rel="stylesheet">
 	<link href="https://cdnjs.cloudflare.com/ajax/libs/jquery.fancytree/2.38.3/skin-win8/ui.fancytree.min.css" rel="stylesheet" type="text/css">
 
 	<style type="text/css">
@@ -74,6 +76,13 @@
 			border: none;
 			inset: 0px 0px 0px 0px;
 		}
+		
+		#echoValue {
+			font-family: monospace;font-size: x-small;
+		}
+		
+		.json-body {margin: 5px 5px;}
+		ul.json-dict, ol.json-array {font: 10px/15px monospace;}
 
 		.severity_debug   {color: #9da1a3; font-family: monospace;font-size: x-small;margin-bottom: 0px}
 		.severity_info    {color: #095585; font-family: monospace;font-size: x-small;margin-bottom: 0px}
@@ -91,9 +100,6 @@
 	</style>
 
 	<script type="text/javascript">
-		var dialog;
-		var dialogCommand;
-		
 		// Table implementation
 		$(function(){
 			// --- Initialize sample trees
@@ -123,7 +129,6 @@
 				},
 			
 				init: function(event, data) {
-					// Set key from first part of title (just for this demo output)
 					data.tree.visit(function(n) {
 						n.key = n.title.split(" ")[0];
 					});
@@ -157,6 +162,7 @@
 					
 					// Column #2: Edit and Tools
 					$tdList.eq(2).html('<span class="ui-icon ui-icon-refresh" style="cursor:pointer" title="refresh" onclick="reload(\''+data.node.key+'\')"></span>');
+					$tdList.eq(3).html('<span class="ui-icon ui-icon-gear hasmenu" style="cursor:pointer" title="refresh" key="'+data.node.key+'" onclick="showMenu(this)"></span>');
 				},
 				
 				renderNode: function (event, data) {
@@ -233,11 +239,8 @@
 				  };
 				}
 			});
-		});
-		
-		
-		// JQuery UI stuff
-		$( function() {
+			
+			
 			// #### Context menu ####
 			$("#tree").contextmenu({
 				delegate: ".hasmenu",
@@ -273,49 +276,29 @@
 			
 			// #### Default buttons ####
 			$( "#refresh" ).button({
-			  "icon": "ui-icon-refresh",
-			  "showLabel": true,
-			  "disabled": false
-			});
-			$( "#download" ).button({
-			  "icon": "ui-icon-arrowstop-1-s",
-			  "showLabel": true,
-			  "disabled": true
-			});
-			$( "#delete" ).button({
-			  "icon": "ui-icon-trash",
-			  "showLabel": true,
-			  "disabled": true
-			});
-			$( "#setvalue" ).button({
-			  "icon": "	ui-icon-arrowstop-1-n",
-			  "showLabel": true,
-			  "disabled": true
-			});
-			
-			$( ".toolbar" ).controlgroup();
-			
-			$("#refresh").on("click", function() {
+			  "icon": "ui-icon-refresh", "showLabel": true, "disabled": false
+			}).on("click", function() {
 				reload('');
 			});
 			
-			$("#setvalue").on("click", function() {
-				setValue();
-			});
+			$( "#download" ).button({
+			  "icon": "ui-icon-arrowstop-1-s", "showLabel": true, "disabled": true
+			}).on("click", downloadValue);
 			
-			$("#download").on("click", function() {
-				downloadValue();
-			});
+			$( "#delete" ).button({
+			  "icon": "ui-icon-trash", "showLabel": true, "disabled": true
+			}).on("click", deleteNode);
 			
-			$("#delete").on("click", function() {
-				deleteNode();
-			});
+			$( "#setvalue" ).button({
+			  "icon": "	ui-icon-arrowstop-1-n", "showLabel": true, "disabled": true
+			}).on("click", setValue);
+			
+			$( ".toolbar" ).controlgroup();
 			
 			// #### Some styles ####
 			$('selectedpath').addClass("ui-widget ui-widget-content ui-corner-all");
-			$('echoValue').addClass("ui-widget ui-widget-content ui-corner-all");
-			$('echoModel').addClass("ui-widget ui-widget-content ui-corner-all");
-			$('logText').addClass("ui-widget ui-widget-content ui-corner-all");
+			$('echoValue').   addClass("ui-widget ui-widget-content ui-corner-all");
+			$('logText').     addClass("ui-widget ui-widget-content ui-corner-all");
 		} );
 		
 		// Delete currently selected node
@@ -377,7 +360,7 @@
 					
 					var newDiv = $(document.createElement('div')); 
 					$(newDiv).html(html);
-					dialog = $(newDiv).dialog({
+					var dialog = $(newDiv).dialog({
 						autoOpen: false,
 						height: 400,
 						width: 350,
@@ -404,7 +387,7 @@
 									success: function (answer) {
 										if(answer !== undefined && answer.children !== undefined && answer.children[0].name == 'Log') {
 											logMessages(answer.children[0].children);
-											notifyWith(answer.children[0].children[answer.children[0].children.length - 1]);
+											notifyWith(answer.children[0].children[answer.children[0].children.length - 1], false);
 										} else {
 											notify('info', cmd + ' call finished');
 										}
@@ -430,7 +413,7 @@
 						success: function (answer) {
 							if(answer !== undefined && answer.children !== undefined && answer.children[0].name == 'Log') {
 								logMessages(answer.children[0].children);
-								notifyWith(answer.children[0].children[answer.children[0].children.length - 1]);
+								notifyWith(answer.children[0].children[answer.children[0].children.length - 1], false);
 							} else {
 								notify('info', cmd + ' call finished');
 							}
@@ -440,14 +423,12 @@
 						}
 					});
 				}
-				// Find the model of the command...
-				// Special command?
 			}
 		}
 		
 		function text2message(logText) {
 			var text = logText;
-			var time;
+			var time, caller;
 			var severity = "info";
 			if(text.includes('[') && text.includes(']')) {
 				severity = text.substring(text.indexOf('[')+1, text.indexOf(']')).toLowerCase();
@@ -457,7 +438,11 @@
 				time = text.substring(text.indexOf('[')+1, text.indexOf(']'));
 				text = text.substring(text.indexOf(']') + 1).trim();
 			}
-			return {time: time, severity: severity, text: text};
+			if(text.includes('[') && text.includes(']')) {
+				caller = text.substring(text.indexOf('[')+1, text.indexOf(']'));
+				text = text.substring(text.indexOf(']') + 1).trim();
+			}
+			return {time: time, severity: severity, caller: caller, text: text};
 		}
 		
 		/** Log log messages
@@ -465,15 +450,15 @@
 		function logMessages(logs) {
 			for(log of logs) {
 				var message = text2message(log.preview);
-				logMessage(message.time, message.severity, message.text);
+				logMessage(message.time, message.severity, message.caller, message.text);
 			}
 		}
 		
-		function logMessage(time, severity, text) {
+		function logMessage(time, severity, caller, text) {
 			if(severity != null)
 				severity = severity.toLowerCase();
-			var toPrint = (time == null ? '' : '['+time+'] ' ) + '[' + severity + '] ' + text;
-			$("#logText").append('<p class="severity_'+severity+'">'+toPrint+'</p>');
+			var toPrint = (time == null ? '' : '['+time+'] ' ) + text;
+			$("#logText").append('<p class="severity_'+severity+'">'+toPrint.replace(/(?:\r\n|\r|\n)/g, '<br>').trim()+'</p>');
 			console.log(toPrint);
 		}
 		
@@ -499,7 +484,7 @@
 
 			// Infos
 			$("a[name='selectedpath']").text(path);
-			$("#echoModel").val(model === undefined ? '' : JSON.stringify(model, null, 4));
+			$('#echoModel').jsonBrowse(model === undefined ? {} : model);
 			$("#echoValue").val(model === undefined ? '' : (model.value == null ? model.preview : model.value));
 		}
 
@@ -549,20 +534,22 @@
 			}
 		}
 		
-		function notifyWith(log) {
+		// Use LogMessage-object to notify
+		function notifyWith(log, doLog) {
 			var message = text2message(log.preview);
-			notify(message.severity, message.text);
+			notify(message.severity, message.text, doLog);
 		}
 
-		function notify(severity, text) {
+		function notify(severity, text, doLog) {
 			if(severity.startsWith('err')) {
-				toastr.error(text, {hideDuration: 10000, preventDuplicates: true, progressBar: true});
+				toastr.error(text, null, {hideDuration: 10000, preventDuplicates: true, progressBar: true, positionClass: 'toast-top-center'});
 			} else if(severity.startsWith('warn')) {
-				toastr.warning(text, {hideDuration: 5000, preventDuplicates: true, progressBar: true});
+				toastr.warning(text, null, {hideDuration: 5000, preventDuplicates: true, progressBar: true, positionClass: 'toast-top-center'});
 			} else {
-				toastr.info(text, {hideDuration: 2000, preventDuplicates: true, progressBar: true});
+				toastr.info(text, null, {hideDuration: 2000, preventDuplicates: true, progressBar: true, positionClass: 'toast-top-center'});
 			}
-			logMessage(null, severity, text);
+			if(doLog === undefined || doLoad != false)
+				logMessage(null, severity, null, text);
 		}
 		
 		// Reload desired or currently selected fancy tree node
@@ -575,6 +562,10 @@
 			} else if(node.level != 1) {
 				node.parent.load(true);
 			}
+		}
+		
+		function showMenu(event) {
+			$("#tree").contextmenu("open", event);
 		}
 		
 		// Transfer value from value-textarea to the server
@@ -616,11 +607,6 @@
             <h1>MINOVA Hub Viewer</h1>
         </header>
 		
-		<div id="notification" style="display: none;">
-		  <span class="dismiss"><a title="dismiss this notification">x</a></span>
-		  <span id="notificationtext"></span>
-		</div>
-		
 		<div class="wrapper clearfix">
 			<div id="tabs">
 				<ul>
@@ -644,8 +630,7 @@
 						</table>
 					</section>
 					
-					<section style="overflow:scroll; 20em; resize: both; background: #ffffff; width: 40em">
-					<!--div id="accordion-resizer" class="ui-widget-content"-->
+					<section style="overflow:scroll; 20em; resize: both; background: #ffffff; width: 30em">
 					  <div id="accordion">
 						<h3><span class="ui-icon ui-icon-script"></span>Info</h3>
 						<div>
@@ -660,7 +645,6 @@
 							<p>
 							<p>
 							<textarea id="echoValue" rows="5" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all"></textarea>
-							
 						</div>
 						
 						<h3><span class="ui-icon ui-icon-info"></span>Logs</h3>
@@ -669,11 +653,10 @@
 						
 						<h3><span class="ui-icon ui-icon-script"></span>JSON</h3>
 						<div>
-							<textarea id="echoModel" rows="15" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all"></textarea>
+							<!-- https://www.jsdelivr.com/package/npm/json-browse -->
+							<pre id="echoModel" class="json-body" style="width: 100%; resize: vertical"></pre>
 						</div>
-
-					  <!--/div-->
-					</div>
+					  </div>
 					</section>
 				</div>
 				<div id="tabs-2" style="overflow:scroll">
