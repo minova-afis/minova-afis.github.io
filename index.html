@@ -22,7 +22,7 @@
 
 	<style type="text/css">
 		body {
-			font: 14px Arial,sans-serif; 
+			font: 14px Optima,sans-serif; 
 			margin: 0px;
 		}
 		header {
@@ -37,8 +37,7 @@
 			background: #f2f2f2;  
 		}
 		section {
-			float: left; 
-			padding: 20px;
+			padding-right: 10px;
 			min-height: 170px;
 			box-sizing: border-box;
 			overflow: auto;
@@ -77,26 +76,31 @@
 			inset: 0px 0px 0px 0px;
 		}
 		
-		#echoValue {
-			font-family: monospace;font-size: x-small;
-		}
+		#tree		  	  {min-width: 20em}
+		#echoValue    	  {font-family: monospace;font-size: x-small; width: 100%; resize: vertical}
+		#echoModel    	  {width: 100%; resize: vertical}
+		#logText      	  {resize: vertical; margin-bottom: 0px}
+		#selectedPath 	  {font-family: monospace;font-size: smaller; color: #8a8987}
+		#tableSection 	  {overflow:scroll; height: 30em; resize: both; background: #ffffff; min-width: 25em; width: fit-content; float: left}
+		#accordionSection {overflow:scroll; height: 30em; resize: both; background: #ffffff; min-width: 25em; max-width: 50em}
 		
-		.json-body {margin: 5px 5px;}
+		.json-body 	  {margin: 5px 5px;}
 		ul.json-dict, ol.json-array {font: 10px/15px monospace;}
 
-		.severity_debug   {color: #9da1a3; font-family: monospace;font-size: x-small;margin-bottom: 0px}
-		.severity_info    {color: #095585; font-family: monospace;font-size: x-small;margin-bottom: 0px}
-		.severity_warning {color: #db7d12; font-family: monospace;font-size: x-small;margin-bottom: 0px}
-		.severity_error   {color: #cc3d27; font-family: monospace;font-size: x-small;margin-bottom: 0px}
+		.logmessage   	  {font-family: monospace;font-size: x-small;margin-bottom: 0px; margin-top: 0px}
+		.severity_debug   {color: #9da1a3}
+		.severity_info    {color: #095585}
+		.severity_warning {color: #db7d12}
+		.severity_error   {color: #cc3d27}
 		
 		label.dialogfield, input.password.dialogfield, input.text.dialogfield { display:block; }
 		input.password.dialogfield  { margin-bottom:12px; width:95%; padding: .4em; }
-		input.text.dialogfield { margin-bottom:12px; width:95%; padding: .4em; }
-		input.checkbox.dialogfield { margin-bottom:12px; padding: .4em; }
-		fieldset { padding:0; border:0; margin-top:25px; }
-		h1 { font-size: 1.2em; margin: .6em 0; }
-		.ui-dialog .ui-state-error { padding: .3em; }
-		.validateTips { border: 1px solid transparent; padding: 0.3em; }
+		input.text.dialogfield 		{ margin-bottom:12px; width:95%; padding: .4em; }
+		input.checkbox.dialogfield 	{ margin-bottom:12px; padding: .4em; }
+		fieldset 					{ padding:0; border:0; margin-top:25px; }
+		h1 							{ font-size: 1.2em; margin: .6em 0; }
+		.ui-dialog .ui-state-error 	{ padding: .3em; }
+		.validateTips 				{ border: 1px solid transparent; padding: 0.3em; }
 	</style>
 
 	<script type="text/javascript">
@@ -149,18 +153,10 @@
 					// Column #0: is rendered by fancytree
 					
 					// Column #1: Value column
-					var value = '';
-					var maxLen = 100;
-					if(model !== undefined) {
-						if(model.preview != null) {
-							value = (model.preview.length > maxLen ? model.preview.substring(0, maxLen) + "..." : model.preview);
-						} else if(model.value != null) {
-							value = (model.value.length > maxLen ? model.value.substring(0, maxLen) + "..." : model.value);
-						}
-					}
-					$tdList.eq(1).text(value);
+					var editor = createEditor(model);
+					$tdList.eq(1).html(editor);
 					
-					// Column #2: Edit and Tools
+					// Column #2: "Buttons"
 					$tdList.eq(2).html('<span class="ui-icon ui-icon-refresh" style="cursor:pointer" title="refresh" onclick="reload(\''+data.node.key+'\')"></span>');
 					$tdList.eq(3).html('<span class="ui-icon ui-icon-gear hasmenu" style="cursor:pointer" title="refresh" key="'+data.node.key+'" onclick="showMenu(this)"></span>');
 				},
@@ -202,6 +198,7 @@
 									var value = child.name;
 									var host = $("#host").val();
 									var isDownloadable = (child.remoteType == 'ch.minova.assist.fs.LocalFile');
+									child.fullPath = data.node.key +'/'+ child.name;
 									var path = data.node.key +'/'+ child.name;
 									data.result[i++] = {title:  (isDownloadable
 																? '<a class="hasmenu" key="'+path+'" href="'+host + '/getvalue/' + path + '?style=text'+'">'+value+'</a>'
@@ -291,7 +288,7 @@
 			
 			$( "#setvalue" ).button({
 			  "icon": "	ui-icon-arrowstop-1-n", "showLabel": true, "disabled": true
-			}).on("click", setValue);
+			}).on("click", setEnteredValue);
 			
 			$( ".toolbar" ).controlgroup();
 			
@@ -337,112 +334,72 @@
 				downloadValue();
 			} else {
 				if(cmd.includes(";")) {
-					var params = cmd.substring(cmd.indexOf(";") + 1).split(";");
+					var args = cmd.substring(cmd.indexOf(";") + 1);
 					cmd = cmd.substring(0, cmd.indexOf(";"));
-					var html = '<div id="dialog-form" title="Execute '+cmd+'">' +
-							   '<p class="validateTips">Please enter required arguments</p><form><fieldset>';
-					for(param of params) {
-						var def = param.split(",");
-						var type = 'text';
-						if(def[1] == 'java.lang.Boolean')
-							type = 'checkbox';
-						if(def[4] == 'Password')
-							type = 'password';
-						if(type == 'checkbox') {
-							html += '<label for="'+def[0]+'">'+def[0]+'</label>';
-							html += '<input type="checkbox" name="'+def[0]+'" id="'+def[0]+'" value="'+def[3]+'" class="ui-widget-content ui-corner-all"></input>';
-						} else {
-							html += '<label class="dialogfield" for="'+def[0]+'">'+def[0]+'</label>';
-							html += '<input type="'+type+'" name="'+def[0]+'" id="'+def[0]+'" value="'+def[3]+'" class="dialogfield text ui-widget-content ui-corner-all"></input>';
-						}
-					}
-					html += '</fieldset></form></div>'
-					
-					var newDiv = $(document.createElement('div')); 
-					$(newDiv).html(html);
-					var dialog = $(newDiv).dialog({
+					var form = generateForm(cmd, args);
+					$(form).dialog({
 						autoOpen: false,
-						height: 400,
-						width: 350,
 						modal: true,
 						buttons: {
 							"execute": function() {
-								dialog.dialog("close");
-								var argsStr = '';
-								args = new Object();
-								$(dialog).each(function(){
-									for(input of $(this).find(':input')) {
-										var value = ($(input).prop('type') == 'checkbox' ? '' + $(input).is(":checked") : $(input).val());
-										$(args).attr('arg' + $(input).prop('name'), value);
-										argsStr += (argsStr.length == 0 ? "?" : "&") + 'arg' + $(input).prop('name') + "=" + value;
-									}
-								});
-								console.log(args);
-								var host = $("#host").val();
-								$.ajax({
-									url: host + '/call/' + cmd + argsStr,
-									headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
-									dataType: 'json',
-									//data: JSON.stringify(args),
-									success: function (answer) {
-										if(answer !== undefined && answer.children !== undefined && answer.children[0].name == 'Log') {
-											logMessages(answer.children[0].children);
-											notifyWith(answer.children[0].children[answer.children[0].children.length - 1], false);
-										} else {
-											notify('info', cmd + ' call finished');
-										}
-									},
-									error: function (request, status, error) {
-										notify('error', cmd + ' call failed ('+status+' '+request.responseText+')');
-									}
-								});
+								$(this).dialog("close");
+								executeWithInputs(cmd, $(this));
 							},
 							Cancel: function() {
-								dialog.dialog("close");
+								$(this).dialog("close");
 							}
 						}
-					});
-					dialog.dialog( "open" );
-					// We need to ask some values...
+					}).on("submit", function( event ) {
+						event.preventDefault();
+						$(this).dialog("close");
+						executeWithInputs(cmd, $(this));
+					}).dialog( "open" );
 				} else {
-					var host = $("#host").val();
-					$.ajax({
-						url: host + '/call/' + cmd,
-						headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
-						dataType: 'json',
-						success: function (answer) {
-							if(answer !== undefined && answer.children !== undefined && answer.children[0].name == 'Log') {
-								logMessages(answer.children[0].children);
-								notifyWith(answer.children[0].children[answer.children[0].children.length - 1], false);
-							} else {
-								notify('info', cmd + ' call finished');
-							}
-						},
-						error: function (request, status, error) {
-							notify('error', cmd + ' call failed ('+status+' '+request.responseText+')');
-						}
-					});
+					executeWithInputs(cmd);
 				}
 			}
 		}
 		
-		function text2message(logText) {
-			var text = logText;
-			var time, caller;
-			var severity = "info";
-			if(text.includes('[') && text.includes(']')) {
-				severity = text.substring(text.indexOf('[')+1, text.indexOf(']')).toLowerCase();
-				text = text.substring(text.indexOf(']') + 1).trim();
+		/*
+		*/
+		function executeWithInputs(cmd, dialog) {
+			var argsStr = '';
+			args = new Object();
+			if(dialog !== undefined && dialog != null) {
+				$(dialog).each(function() {
+					for(input of $(this).find(':input')) {
+						var value = ($(input).prop('type') == 'checkbox' ? '' + $(input).is(":checked") : $(input).val());
+						$(args).attr('arg' + $(input).prop('name'), value);
+						argsStr += (argsStr.length == 0 ? "?" : "&") + 'arg' + $(input).prop('name') + "=" + value;
+					}
+				});
 			}
-			if(text.includes('[') && text.includes(']')) {
-				time = text.substring(text.indexOf('[')+1, text.indexOf(']'));
-				text = text.substring(text.indexOf(']') + 1).trim();
-			}
-			if(text.includes('[') && text.includes(']')) {
-				caller = text.substring(text.indexOf('[')+1, text.indexOf(']'));
-				text = text.substring(text.indexOf(']') + 1).trim();
-			}
-			return {time: time, severity: severity, caller: caller, text: text};
+			var host = $("#host").val();
+			$.ajax({
+				url: host + '/call/' + cmd + argsStr,
+				headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
+				contentType: "application/json; charset=utf-8",
+				dataType: 'json',
+				//data: JSON.stringify(args),
+				success: function (answer) {
+					if(answer !== undefined && answer.children !== undefined && answer.children[0].name == 'Log') {
+						logMessages(answer.children[0].children);
+						notifyWith(answer.children[0].children[answer.children[0].children.length - 1], false);
+					} else {
+						notify('info', cmd + ' call finished');
+					}
+				},
+				error: function (request, status, error) {
+					notify('error', cmd + ' call failed ('+status+' '+request.responseText+')');
+				}
+			});
+
+		}
+		
+		function htmlEncode(s) {
+		  var el = document.createElement("div");
+		  el.innerText = el.textContent = s;
+		  return el.innerHTML;
 		}
 		
 		/** Log log messages
@@ -458,7 +415,8 @@
 			if(severity != null)
 				severity = severity.toLowerCase();
 			var toPrint = (time == null ? '' : '['+time+'] ' ) + text;
-			$("#logText").append('<p class="severity_'+severity+'">'+toPrint.replace(/(?:\r\n|\r|\n)/g, '<br>').trim()+'</p>');
+			toPrint = htmlEncode(toPrint).trim(); // .replace(/(?:\r\n|\r|\n)/g, '<br>').trim()
+			$("#logText").append('<p class="logmessage severity_'+severity+'">'+toPrint+'</p>');
 			console.log(toPrint);
 		}
 		
@@ -486,6 +444,69 @@
 			$("a[name='selectedpath']").text(path);
 			$('#echoModel').jsonBrowse(model === undefined ? {} : model);
 			$("#echoValue").val(model === undefined ? '' : (model.value == null ? model.preview : model.value));
+		}
+		
+		function isValue(model) {
+			if(model == undefined || model == null)
+				return false;
+			return model.value != null || (model.remoteType != null && model.remoteType.startsWith('ch.minova.appmodel.value.'));
+		}
+		
+		function createEditor(model) {
+			if(model === undefined || model == null)
+				return '';
+			var readonly = (model.readonly != null && model.readonly == 'true');
+			var value = '';
+			if(model.remoteType == 'ch.minova.appmodel.value.Choice' || model.remoteType == 'ch.minova.appmodel.value.ChoiceEnum') {
+				value = '<select id="'+model.name+'" name="'+model.name+'" '+
+						 (readonly ? 'disabled' : ' onchange="setValue(\''+model.fullPath+'\', this.options[this.selectedIndex].text)"')+'>';
+				if(model.choices != null)
+					for(choice of model.choices.split(";"))
+						value += '<option value="'+choice+'" '+(choice == model.value ? 'selected': '')+'>'+choice+'</option>';
+				value += '</select>';
+			} else if(model.remoteType == 'ch.minova.appmodel.value.Bool') {
+				value = '<input type="checkbox" ' +
+				        (model.value == 'true' ? 'checked ' : '') +
+						(readonly ? ' disabled' : ' onclick="setValue(\''+model.fullPath+'\', this.checked)"') + '></input>';
+			} else {
+				value = (model.preview != null ? model.preview : (model.value != null ? model.value : ''));
+				if(value.length > 100)
+					value = value.substring(0, 100) + " ...";
+				if(!readonly && isValue(model)) {
+					value = '<input type="text" style="border: none; width: 100%" '+
+								' onchange="setValue(\''+model.fullPath+'\', this.value)" onpaste="this.onchange();"' +
+								' value="'+htmlEncode(value)+'"></input>';
+				}
+			}
+			return value;
+		}
+		
+		// Generate a form that asks args as defined in the Command node ("args"-attribute)
+		// E.g."args": "commandLine,java.lang.String,false,,;inBackground,java.lang.Boolean,false,,"
+		function generateForm(cmd, args) {
+			var params = args.split(";");
+			var html = '<form><fieldset>';
+			for(param of params) {
+				var def = param.split(",");
+				var type = 'text';
+				if(def[1] == 'java.lang.Boolean')
+					type = 'checkbox';
+				if(def[4] == 'Password')
+					type = 'password';
+				if(type == 'checkbox') {
+					html += '<label for="'+def[0]+'">'+def[0]+'</label>';
+					html += '<input type="checkbox" name="'+def[0]+'" id="'+def[0]+'" value="'+def[3]+'" class="ui-widget-content ui-corner-all"></input>';
+				} else {
+					html += '<label class="dialogfield" for="'+def[0]+'">'+def[0]+'</label>';
+					html += '<input type="'+type+'" name="'+def[0]+'" id="'+def[0]+'" value="'+def[3]+'" class="dialogfield text ui-widget-content ui-corner-all"></input>';
+				}
+			}
+			html += '<input type="submit" tabindex="-1" style="position:absolute; top:-1000px">'; // Support enter
+			html += '</fieldset></form>';
+			if(cmd.includes('/'))
+				cmd = cmd.substring(cmd.lastIndexOf('/') + 1);
+			var form = $(document.createElement('div')).html(html).attr('id', 'dialog-form').attr('title', 'Execute ' + cmd)
+			return form;
 		}
 
 		function getCurrentPath() {
@@ -548,7 +569,7 @@
 			} else {
 				toastr.info(text, null, {hideDuration: 2000, preventDuplicates: true, progressBar: true, positionClass: 'toast-top-center'});
 			}
-			if(doLog === undefined || doLoad != false)
+			if(doLog === undefined || doLog != false)
 				logMessage(null, severity, null, text);
 		}
 		
@@ -568,17 +589,22 @@
 			$("#tree").contextmenu("open", event);
 		}
 		
+				// Transfer value from value-textarea to the server
+		function setEnteredValue() {
+			setValue(getCurrentPath(), $("#echoValue").val());
+		}
+		
 		// Transfer value from value-textarea to the server
-		function setValue() {
+		function setValue(path, value) {
+			if(value !== undefined && value != null)
+				value = '' + value; // stringify
 			var host = $("#host").val();
-			var path = getCurrentPath();
-			var value = $("#echoValue").val();
 			$.ajax({
 				url: host + '/set/' + path + '?value=' + value,
 				headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
 				dataType: 'json',
 				success: function () {
-					notify('info', path + ' set');
+					notify('info', path + ' set' + (value.length < 30 ? ' to ' + value : ''));
 					reload(path);
 				},
 				error: function (request, status, error) {
@@ -586,6 +612,25 @@
 					reload(path);
 				}
 			});
+		}
+		
+		function text2message(logText) {
+			var text = logText;
+			var time, caller;
+			var severity = "info";
+			if(text.includes('[') && text.includes(']')) {
+				severity = text.substring(text.indexOf('[')+1, text.indexOf(']')).toLowerCase();
+				text = text.substring(text.indexOf(']') + 1).trim();
+			}
+			if(text.includes('[') && text.includes(']')) {
+				time = text.substring(text.indexOf('[')+1, text.indexOf(']'));
+				text = text.substring(text.indexOf(']') + 1).trim();
+			}
+			if(text.includes('[') && text.includes(']')) {
+				caller = text.substring(text.indexOf('[')+1, text.indexOf(']'));
+				text = text.substring(text.indexOf(']') + 1).trim();
+			}
+			return {time: time, severity: severity, caller: caller, text: text};
 		}
 		
 		// Transfer URL parameters to form: path, host
@@ -597,6 +642,10 @@
 			if(host != null && host != '')
 				$( "#host" ).val(host);
 		});
+		
+		$.ajaxSetup({
+			scriptCharset: "utf-8"
+		});
 	</script>
 	
 </head>
@@ -606,7 +655,7 @@
 	    <header>
             <h1>MINOVA Hub Viewer</h1>
         </header>
-		
+
 		<div class="wrapper clearfix">
 			<div id="tabs">
 				<ul>
@@ -614,8 +663,8 @@
 					<li><a href="#tabs-2"><span class="ui-icon ui-icon-gear"></span>Settings</a></li>
 				</ul>
 				<div id="tabs-1" style="overflow:scroll">
-					<section style="overflow:scroll; height:30em; resize: both; background: #ffffff; width: fit-content">
-						<table id="tree" style="min-width: 20em">
+					<section id="tableSection">
+						<table id="tree">
 							<colgroup>
 								<col width="*"></col>
 								<col width="*"></col>
@@ -630,7 +679,7 @@
 						</table>
 					</section>
 					
-					<section style="overflow:scroll; 20em; resize: both; background: #ffffff; width: 30em">
+					<section id="accordionSection">
 					  <div id="accordion">
 						<h3><span class="ui-icon ui-icon-script"></span>Info</h3>
 						<div>
@@ -641,20 +690,20 @@
 								<button id="setvalue">Set</button>
 							</div>
 							<p>
-							<a name="selectedpath" style="color: #8a8987"></a>
+							<a name="selectedpath" id="selectedPath"></a>
 							<p>
 							<p>
-							<textarea id="echoValue" rows="5" readonly="true" style="width: 100%; resize: vertical" class="text ui-widget ui-state-default ui-corner-all"></textarea>
+							<textarea id="echoValue" rows="5" readonly="true" class="text ui-widget ui-state-default ui-corner-all"></textarea>
 						</div>
 						
 						<h3><span class="ui-icon ui-icon-info"></span>Logs</h3>
-						<div id="logText" style=" resize: vertical" class="ui-widget ui-state-default ui-corner-all" style="margin-bottom: 0px">
+						<div id="logText" class="ui-widget ui-state-default ui-corner-all">
 						</div>
 						
 						<h3><span class="ui-icon ui-icon-script"></span>JSON</h3>
 						<div>
 							<!-- https://www.jsdelivr.com/package/npm/json-browse -->
-							<pre id="echoModel" class="json-body" style="width: 100%; resize: vertical"></pre>
+							<pre id="echoModel" class="json-body"></pre>
 						</div>
 					  </div>
 					</section>
