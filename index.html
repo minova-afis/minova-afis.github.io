@@ -66,7 +66,7 @@
 		form.tr, div.tr {
 			display:table-row;
 		}
-		spam.td, div.td, input.td, label.td {
+		span.td, div.td, input.td, label.td {
 			display:table-cell;
 		}
 	
@@ -127,6 +127,11 @@
 					{title: "Root", key:"Environment", lazy: true, istreeroot: true, extraClasses: 'hasmenu'},
 				],
 				
+				// Update info when a value is selected and (de)activate actions
+				activate: function(event, data) {
+					fillInfo(data.node.key, data.node.data.model);
+				},
+				
 				// See more events here: https://unpkg.com/browse/jquery.fancytree@2.23.0/demo/sample-events.html
 				collapse: function(event, data) {
 					data.node.resetLazy();
@@ -136,6 +141,78 @@
 					data.tree.visit(function(n) {
 						n.key = n.title.split(" ")[0];
 					});
+				},
+				
+				lazyLoad: function(event, data) {
+				  var node = data.node;
+				  if(node.data.istreeroot == true) {
+				     node.key = $("#rootpath").val();
+				  }
+				  var host = $("#host").val();
+				  data.result = {
+					url: host + "/get?imagedata=true",
+					headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
+					data: {path: node.key},
+					cache: false
+				  };
+				},
+				
+				// Convert Hub REST answer format to fancytable format. Also load images
+				postProcess: function(event, data) {
+					var resp = data.response;
+					if(Array.isArray(resp)) {
+						data.result = resp;
+					} else if( resp.rid != null ) {
+						// Convert data...
+						data.result = [];
+						if(data.node.data !== undefined) {
+							if(data.node.data.model == undefined) {
+								data.node.data.model = resp;
+							} else {
+								// Take-over new attributes
+								Object.assign(data.node.data.model, resp);
+								data.node.icon = "data:image/png;base64, " + resp.iconData;
+							}
+						}
+							
+						if(resp.childrenCount > 0 && resp.children != null) {
+							var i = 0;
+							for (const child of resp.children) {
+								// FIXME process commands
+								var showHidden = $("#showHidden").is(":checked");
+								if(showHidden || child.visible != 'false') {
+									// Create download links right in the tree
+									var value = child.name;
+									var host = $("#host").val();
+									var isDownloadable = (child.remoteType == 'ch.minova.assist.fs.LocalFile');
+									child.fullPath = data.node.key +'/'+ child.name;
+									var path = data.node.key +'/'+ child.name;
+									data.result[i] = {title:  (isDownloadable
+																? '<a class="hasmenu" key="'+path+'" href="'+host + '/getvalue/' + path + '?style=text">'+value+'</a>'
+																: '<div class="hasmenu" key="'+path+'">' + value + '</div>'),
+														key:    path,
+														lazy:   true, //(child.childrenCount > 0),
+														icon:   "data:image/png;base64, " + child.iconData,
+														model:  child,
+														extraClasses: (child.visible == 'false' ? 'hide' : '')};
+									if(child.childrenCount == undefined || child.childrenCount == null || child.childrenCount == 0)
+										data.result[i].children = [];
+									i++;
+									// Update currently selected
+									if(path == getCurrentPath())
+										fillInfo(path, child);
+								}
+							}
+						}
+						// Re-render column
+						if(data.node !== undefined)
+							data.node.render(true);
+					} else {
+						// Signal error condition to tree loader
+						data.result = {
+							error: "ERROR #" + resp.faultCode + ": " + resp.faultMsg
+						}
+					}
 				},
 				
 				renderColumns: function(event, data) {
@@ -157,83 +234,30 @@
 					$tdList.eq(1).html(editor);
 					
 					// Column #2: "Buttons"
-					$tdList.eq(2).html('<span class="ui-icon ui-icon-refresh" style="cursor:pointer" title="refresh" onclick="reload(\''+data.node.key+'\')"></span>');
-					$tdList.eq(3).html('<span class="ui-icon ui-icon-gear hasmenu" style="cursor:pointer" title="refresh" key="'+data.node.key+'" onclick="showMenu(this)"></span>');
+					// Show only if there are commands
+					var commands = '';
+					if(model !== undefined && model.startable == 'true') {
+						// Add start/stop button
+						if(model.started == 'true') {
+							commands += '<span class="ui-icon ui-icon-pause" style="cursor:pointer" title="stop" onclick="setStarted(\''+data.node.key+'\', false)"></span>';							
+						} else {
+							commands += '<span class="ui-icon ui-icon-play" style="cursor:pointer" title="start" onclick="setStarted(\''+data.node.key+'\', true)"></span>';
+						}
+					} else {
+						commands += '<span class="ui-icon ui-icon-blank"></span>';
+					}
+					// Add commands
+					if(hasCommands(model))
+						commands += '<span class="ui-icon ui-icon-gear hasmenu" style="cursor:pointer" title="commands" key="'+data.node.key+'" onclick="showMenu(this)"></span>';								
+					$tdList.eq(2).html('<span style="white-space:nowrap">'+commands+'</span>');
+					// Reload button 
+					$tdList.eq(3).html('<span class="ui-icon ui-icon-refresh" style="cursor:pointer" title="refresh" onclick="reload(\''+data.node.key+'\')"></span>');
 				},
 				
 				renderNode: function (event, data) {
 					var node = data.node;
 					if (node.data.model !== undefined && node.data.model.visible == 'false')
 						$(node.span).closest('li').addClass('hide');
-				},
-				
-				// Update info when a value is selected and (de)activate actions
-				activate: function(event, data) {
-					fillInfo(data.node.key, data.node.data.model);
-				},
-				
-				// Convert Hub REST answer format to fancytable format. Also load images
-				postProcess: function(event, data) {
-					var resp = data.response;
-					if(Array.isArray(resp)) {
-						data.result = resp;
-					} else if( resp.rid != null ) {
-						// Convert data...
-						data.result = [];
-						if(data.node.data !== undefined) {
-							if(data.node.data.model == undefined) {
-								data.node.data.model = {children: resp.children};
-							} else {
-								data.node.data.model.children = resp.children;
-							}
-						}
-							
-						if(resp.childrenCount > 0 && resp.children != null) {
-							var i = 0;
-							for (const child of resp.children) {
-								// FIXME process commands
-								var showHidden = $("#showHidden").is(":checked");
-								if(showHidden || child.visible != 'false') {
-									// Create download links right in the tree
-									var value = child.name;
-									var host = $("#host").val();
-									var isDownloadable = (child.remoteType == 'ch.minova.assist.fs.LocalFile');
-									child.fullPath = data.node.key +'/'+ child.name;
-									var path = data.node.key +'/'+ child.name;
-									data.result[i++] = {title:  (isDownloadable
-																? '<a class="hasmenu" key="'+path+'" href="'+host + '/getvalue/' + path + '?style=text'+'">'+value+'</a>'
-																: '<div class="hasmenu" key="'+path+'">' + value + '</div>'),
-														key:    path,
-														lazy:   (child.childrenCount > 0),
-														icon:   "data:image/png;base64, " + child.iconData,
-														model:  child,
-														extraClasses: (child.visible == 'false' ? 'hide' : '')};
-									// Update currently selected
-									if(path == getCurrentPath())
-										fillInfo(path, child);
-								}
-							}
-						}
-					} else {
-						// Signal error condition to tree loader
-						data.result = {
-							error: "ERROR #" + resp.faultCode + ": " + resp.faultMsg
-						}
-					}
-				},
-				
-				lazyLoad: function(event, data) {
-				  var node = data.node;
-				  if(node.data.istreeroot == true) {
-				     node.key = $("#rootpath").val();
-				  }
-				  var host = $("#host").val();
-				  data.result = {
-					url: host + "/get?imagedata=true",
-					headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
-					data: {path: node.key},
-					cache: false
-				  };
 				}
 			});
 			
@@ -297,6 +321,35 @@
 			$('echoValue').   addClass("ui-widget ui-widget-content ui-corner-all");
 			$('logText').     addClass("ui-widget ui-widget-content ui-corner-all");
 		} );
+		
+		function createEditor(model) {
+			if(model === undefined || model == null)
+				return '';
+			var readonly = (model.readonly != null && model.readonly == 'true');
+			var value = '';
+			if(model.remoteType == 'ch.minova.appmodel.value.Choice' || model.remoteType == 'ch.minova.appmodel.value.ChoiceEnum') {
+				value = '<select id="'+model.name+'" name="'+model.name+'" '+
+						 (readonly ? 'disabled' : ' onchange="setValue(\''+model.fullPath+'\', this.options[this.selectedIndex].text)"')+'>';
+				if(model.choices != null)
+					for(choice of model.choices.split(";"))
+						value += '<option value="'+choice+'" '+(choice == model.value ? 'selected': '')+'>'+choice+'</option>';
+				value += '</select>';
+			} else if(model.remoteType == 'ch.minova.appmodel.value.Bool') {
+				value = '<input type="checkbox" ' +
+				        (model.value == 'true' ? 'checked ' : '') +
+						(readonly ? ' disabled' : ' onclick="setValue(\''+model.fullPath+'\', this.checked)"') + '></input>';
+			} else {
+				value = (model.preview != null ? model.preview : (model.value != null ? model.value : ''));
+				if(value.length > 100)
+					value = value.substring(0, 100) + " ...";
+				if(!readonly && isValue(model)) {
+					value = '<input type="text" style="border: none; width: 100%" '+
+								' onchange="setValue(\''+model.fullPath+'\', this.value)" onpaste="this.onchange();"' +
+								' value="'+htmlEncode(value)+'"></input>';
+				}
+			}
+			return value;
+		}
 		
 		// Delete currently selected node
 		function deleteNode() {
@@ -396,30 +449,6 @@
 
 		}
 		
-		function htmlEncode(s) {
-		  var el = document.createElement("div");
-		  el.innerText = el.textContent = s;
-		  return el.innerHTML;
-		}
-		
-		/** Log log messages
-		*/
-		function logMessages(logs) {
-			for(log of logs) {
-				var message = text2message(log.preview);
-				logMessage(message.time, message.severity, message.caller, message.text);
-			}
-		}
-		
-		function logMessage(time, severity, caller, text) {
-			if(severity != null)
-				severity = severity.toLowerCase();
-			var toPrint = (time == null ? '' : '['+time+'] ' ) + text;
-			toPrint = htmlEncode(toPrint).trim(); // .replace(/(?:\r\n|\r|\n)/g, '<br>').trim()
-			$("#logText").append('<p class="logmessage severity_'+severity+'">'+toPrint+'</p>');
-			console.log(toPrint);
-		}
-		
 		// Show details on given model elements
 		function fillInfo(path, model) {
 			// Actions
@@ -444,41 +473,6 @@
 			$("a[name='selectedpath']").text(path);
 			$('#echoModel').jsonBrowse(model === undefined ? {} : model);
 			$("#echoValue").val(model === undefined ? '' : (model.value == null ? model.preview : model.value));
-		}
-		
-		function isValue(model) {
-			if(model == undefined || model == null)
-				return false;
-			return model.value != null || (model.remoteType != null && model.remoteType.startsWith('ch.minova.appmodel.value.'));
-		}
-		
-		function createEditor(model) {
-			if(model === undefined || model == null)
-				return '';
-			var readonly = (model.readonly != null && model.readonly == 'true');
-			var value = '';
-			if(model.remoteType == 'ch.minova.appmodel.value.Choice' || model.remoteType == 'ch.minova.appmodel.value.ChoiceEnum') {
-				value = '<select id="'+model.name+'" name="'+model.name+'" '+
-						 (readonly ? 'disabled' : ' onchange="setValue(\''+model.fullPath+'\', this.options[this.selectedIndex].text)"')+'>';
-				if(model.choices != null)
-					for(choice of model.choices.split(";"))
-						value += '<option value="'+choice+'" '+(choice == model.value ? 'selected': '')+'>'+choice+'</option>';
-				value += '</select>';
-			} else if(model.remoteType == 'ch.minova.appmodel.value.Bool') {
-				value = '<input type="checkbox" ' +
-				        (model.value == 'true' ? 'checked ' : '') +
-						(readonly ? ' disabled' : ' onclick="setValue(\''+model.fullPath+'\', this.checked)"') + '></input>';
-			} else {
-				value = (model.preview != null ? model.preview : (model.value != null ? model.value : ''));
-				if(value.length > 100)
-					value = value.substring(0, 100) + " ...";
-				if(!readonly && isValue(model)) {
-					value = '<input type="text" style="border: none; width: 100%" '+
-								' onchange="setValue(\''+model.fullPath+'\', this.value)" onpaste="this.onchange();"' +
-								' value="'+htmlEncode(value)+'"></input>';
-				}
-			}
-			return value;
 		}
 		
 		// Generate a form that asks args as defined in the Command node ("args"-attribute)
@@ -512,7 +506,7 @@
 		function getCurrentPath() {
 			return $("a[name='selectedpath']").text();
 		}
-		
+
 		function getMenu(key) {
 			if(key == null)
 				key = (getCurrentPath() == 'Root' ? 'Environment' : getCurrentPath());
@@ -542,7 +536,7 @@
 			//menu.push({title: "----"});
 			return menu;
 		}
-		
+
 		// Support for settings given in the URL
 		function getURLParameter(sParam) {
 			var sPageURL = window.location.search.substring(1);
@@ -553,6 +547,41 @@
 					return sParameterName[1];
 				}
 			}
+		}
+		
+		// True if the given element has commands
+		function hasCommands(model) {
+			return (model !== undefined && model.hasCommands == 'true');
+		}
+		
+		function htmlEncode(s) {
+		  var el = document.createElement("div");
+		  el.innerText = el.textContent = s;
+		  return el.innerHTML;
+		}
+		
+		function isValue(model) {
+			if(model == undefined || model == null)
+				return false;
+			return model.value != null || (model.remoteType != null && model.remoteType.startsWith('ch.minova.appmodel.value.'));
+		}
+		
+		/** Log log messages
+		*/
+		function logMessages(logs) {
+			for(log of logs) {
+				var message = text2message(log.preview);
+				logMessage(message.time, message.severity, message.caller, message.text);
+			}
+		}
+		
+		function logMessage(time, severity, caller, text) {
+			if(severity != null)
+				severity = severity.toLowerCase();
+			var toPrint = (time == null ? '' : '['+time+'] ' ) + text;
+			toPrint = htmlEncode(toPrint).trim(); // .replace(/(?:\r\n|\r|\n)/g, '<br>').trim()
+			$("#logText").append('<p class="logmessage severity_'+severity+'">'+toPrint+'</p>');
+			console.log(toPrint);
 		}
 		
 		// Use LogMessage-object to notify
@@ -589,29 +618,38 @@
 			$("#tree").contextmenu("open", event);
 		}
 		
-				// Transfer value from value-textarea to the server
+		function setStarted(path, on) {
+			setAttribute('started', on, path);
+		}
+		
+		// Transfer value from value-textarea to the server
+		function setAttribute(key, value, path) {
+			if(value !== undefined && value != null)
+				value = '' + value; // stringify
+			var host = $("#host").val();
+			$.ajax({
+				url: host + '/set/' + path + '?' + (key !== undefined && key !== null ? 'key=' + key + '&' : '') + 'value=' + value,
+				headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
+				dataType: 'json',
+				success: function () {
+					notify('info', path + ' set' + (key !== undefined && key !== null ? ' ' + key : '') + (value.length < 30 ? ' to ' + value : ''));
+					reload(path);
+				},
+				error: function (request, status, error) {
+					notify('error', path + ' set' + (key !== undefined && key !== null ? ' ' + key : '') + ' failed ('+status+' '+request.responseText+')');
+					reload(path);
+				}
+			});
+		}
+		
+		// Transfer value from value-textarea to the server
 		function setEnteredValue() {
 			setValue(getCurrentPath(), $("#echoValue").val());
 		}
 		
 		// Transfer value from value-textarea to the server
 		function setValue(path, value) {
-			if(value !== undefined && value != null)
-				value = '' + value; // stringify
-			var host = $("#host").val();
-			$.ajax({
-				url: host + '/set/' + path + '?value=' + value,
-				headers: {"Authorization": "Basic " + btoa($("#username").val() + ":" + $("#password").val())},
-				dataType: 'json',
-				success: function () {
-					notify('info', path + ' set' + (value.length < 30 ? ' to ' + value : ''));
-					reload(path);
-				},
-				error: function (request, status, error) {
-					notify('error', path + ' set failed ('+status+' '+request.responseText+')');
-					reload(path);
-				}
-			});
+			setAttribute(null, value, path);
 		}
 		
 		function text2message(logText) {
