@@ -516,7 +516,7 @@
 			var node = tree.getNodeByKey(key);
 			var model = (node == null ? null : node.data.model);
 			var menu = [];
-			menu.push({title: "Refresh", cmd: "refresh", uiIcon: "ui-icon-refresh"});
+			//menu.push({title: "Refresh", cmd: "refresh", uiIcon: "ui-icon-refresh"});
 			
 			if(model !== undefined && model != null) {
 				if(model.remoteType == 'ch.minova.assist.fs.LocalFile')
