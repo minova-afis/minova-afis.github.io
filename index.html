@@ -569,7 +569,7 @@
 		/** Log log messages
 		*/
 		function logMessages(logs) {
-			for(log of logs) {
+			if(logs !== undefined && logs != null) for(log of logs) {
 				var message = text2message(log.preview);
 				logMessage(message.time, message.severity, message.caller, message.text);
 			}
