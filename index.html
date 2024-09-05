@@ -436,8 +436,10 @@
 				//data: JSON.stringify(args),
 				success: function (answer) {
 					if(answer !== undefined && answer.children !== undefined && answer.children[0].name == 'Log') {
-						logMessages(answer.children[0].children);
-						notifyWith(answer.children[0].children[answer.children[0].children.length - 1], false);
+						if(answer.children[0].children !== undefined) { 
+							logMessages(answer.children[0].children);
+							notifyWith(answer.children[0].children[answer.children[0].children.length - 1], false);
+						}
 					} else {
 						notify('info', cmd + ' call finished');
 					}
