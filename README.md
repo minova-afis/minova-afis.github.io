@@ -12,7 +12,7 @@ Der Link kann mit weiteren Parametern versehen werden, um gleich an eine bestimm
 
 ### Path
 
-Root-Pfad im Modell-Baum, z.B. *?path=Environment/Remotes/OAS-AWB-AFIS-minova.service*. Der Pfad zu jedem bel. Element, kann im Info-Feld ausgelesen werden: 
+Root-Pfad im Modell-Baum, z.B. [?path=Environment/Remotes/OAS-AWB-AFIS-minova.service](https://minova-afis.github.io/?path=Environment/Remotes/OAS-AWB-AFIS-minova.service). Der Pfad zu jedem bel. Element, kann im Info-Feld ausgelesen werden: 
 
 ![grafik](https://github.com/user-attachments/assets/921fffac-65a1-449a-ae9d-1439d7f587c2)
 
