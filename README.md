@@ -57,8 +57,8 @@ https://minova-afis.github.io/?path=Environment/Remotes/MyService/Drives/Current
 
 When logging in for the first time from a new browser, the UI tries to load a `defaults.json` profile:
 
-1. From the frontend server (`/defaults.json`, this repository)
-2. From the Hub backend at `Drives/Current/opt/minova/defaults.json`
+1. From the Hub backend at `Drives/Current/opt/minova/defaults.json`
+2. From the frontend server (`/defaults.json`, this repository)
 
 The profile can pre-configure root path, favorites, and display preferences for all users without manual setup.
 
