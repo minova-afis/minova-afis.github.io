@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "settings": {
+    "rootPath": "Environment/Remotes",
+    "showHidden": false,
+    "autoRefreshInterval": 5,
+    "maxDownloadMB": 100,
+    "mode": "expert",
+    "showJson": false
+  },
+  "favorites": [],
+  "preferences": {
+    "filterLines": false
+  }
+}
