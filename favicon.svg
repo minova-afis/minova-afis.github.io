@@ -1,0 +1,36 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024"
+     xmlns="http://www.w3.org/2000/svg">
+
+  <circle cx="512" cy="512" r="490" fill="#ffffff" stroke="#3a3a3a" stroke-width="30"/>
+
+  <!-- Orange half -->
+  <path d="
+    M 512 12
+    C 790 12 1012 234 1012 512
+    C 1012 790 790 1012 512 1012
+    C 370 1012 270 900 270 760
+    C 270 620 370 512 512 512
+    C 655 512 755 405 755 265
+    C 755 125 655 12 512 12
+    Z"
+    fill="#f9ad13"/>
+
+  <!-- White half overlay for clean yin-yang curve -->
+  <path d="
+    M 512 12
+    C 234 12 12 234 12 512
+    C 12 790 234 1012 512 1012
+    C 370 1012 270 900 270 760
+    C 270 620 370 512 512 512
+    C 655 512 755 405 755 265
+    C 755 125 655 12 512 12
+    Z"
+    fill="#ffffff"/>
+
+  <!-- Dots -->
+  <circle cx="512" cy="265" r="66" fill="#f9ad13"/>
+  <circle cx="512" cy="760" r="66" fill="#ffffff"/>
+
+  <!-- Outer border on top -->
+  <circle cx="512" cy="512" r="490" fill="none" stroke="#3a3a3a" stroke-width="30"/>
+</svg>
