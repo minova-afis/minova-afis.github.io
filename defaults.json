@@ -3,11 +3,12 @@
   "settings": {
     "rootPath": "Environment/Remotes",
     "showHidden": false,
-    "autoRefreshInterval": 5,
+    "autoRefreshInterval": 0,
     "maxDownloadMB": 100,
     "autoLoadKB": 1024,
-    "mode": "expert",
-    "showJson": false
+    "mode": "simple",
+    "showJson": false,
+    "autoLoadServiceInfo": false
   },
   "favorites": [],
   "preferences": {
